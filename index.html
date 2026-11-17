@@ -1,0 +1,121 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>스트리머님, 거기 아닌데요! — UI 레이아웃 프로토타입</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+<div class="topbar">
+  <div class="logo">지지직<small>Zizizik</small></div>
+  <div class="spacer"></div>
+  <button class="pill-btn" id="guideBtn">영역 가이드</button>
+  <span class="ai-chip" id="aiChip">AI 꺼짐 (더미 응답)</span>
+  <button class="pill-btn" id="settingsBtn">⚙ 설정</button>
+</div>
+
+<div class="layout">
+  <div class="main">
+    <div class="stage" id="stage" data-zone="게임 화면 (16:9)">
+      <div class="scene">
+        <div class="scene-label">3D 게임 화면 (플레이스홀더)</div>
+        <div class="floor"></div>
+        <div id="objs"></div>
+        <div class="pc" id="pc" title="게임 속 캐릭터">🙂</div>
+      </div>
+
+      <div class="hud goal" data-zone="현재 목표"><b>🎯 목표</b> <span id="goal"></span></div>
+
+      <div class="invwrap">
+        <div class="inv" id="inv" data-zone="인벤토리 (칸 수 미정)"></div>
+      </div>
+      <div class="toast" id="toast" data-zone="획득 알림"></div>
+      <div class="clear" id="clear">🎉 STAGE CLEAR</div>
+
+      <div class="dona" id="dona" data-zone="도네이션 알림">
+        <div class="img" id="donaImg">⚡</div>
+        <div class="head" id="donaHead"></div>
+        <div class="msg" id="donaMsg"></div>
+      </div>
+
+      <div class="streamer" id="streamer" data-zone="스트리머 이미지">
+        <svg viewBox="0 0 200 240" aria-label="스트리머 플레이스홀더">
+          <ellipse cx="100" cy="118" rx="78" ry="92" fill="#D3E7A5"/>
+          <path d="M30 240 Q100 170 170 240Z" fill="#fff"/>
+          <path d="M70 232 L100 205 L130 232" fill="none" stroke="#5c7cff" stroke-width="8"/>
+          <ellipse cx="100" cy="112" rx="56" ry="60" fill="#ffe7da"/>
+          <path d="M42 108 Q48 40 100 44 Q152 40 158 108 Q140 70 118 66 Q112 86 84 90 Q62 92 42 108Z" fill="#D3E7A5"/>
+          <circle cx="152" cy="52" r="13" fill="#ffe14a"/>
+          <g id="face"></g>
+        </svg>
+        <img id="sprite" alt="" hidden>
+        <div class="tag">스트리머 이미지 (표정 스프라이트)</div>
+      </div>
+
+      <div class="bubble" id="bubble" data-emo="normal" data-zone="말풍선">
+        <svg id="bubbleSvg"></svg>
+        <span id="bubbleText"></span>
+      </div>
+    </div>
+
+    <div class="info" data-zone="방송 정보">
+      <div class="avatar">⭐</div>
+      <div class="grow">
+        <div class="title">[퍼즐] 오늘은 진짜 한 번에 깬다!! (훈수 환영)</div>
+        <div class="meta"><span class="live">● LIVE</span> · 시청자 <span id="viewers">1,284</span>명 · <span class="uptime"><span id="timer">00:00:00</span> 방송 중</span> · Stage 1 — 수상한 창고</div>
+      </div>
+      <button class="pill-btn">♡ 팔로우</button>
+    </div>
+
+    <div class="proto">
+      <b>프로토타입 컨트롤</b>
+      <button data-emo="normal">말풍선: 평범</button>
+      <button data-emo="happy">기쁨</button>
+      <button data-emo="shout">놀람</button>
+      <button data-emo="angry">화남</button>
+      <button data-emo="sad">시무룩</button>
+      <span class="sep"></span>
+      <button id="otherDona">다른 시청자 도네</button>
+      <span class="sep"></span>
+      <button id="resetBtn">스테이지 리셋</button>
+      <span id="apiStat"></span>
+    </div>
+  </div>
+
+  <aside class="chat" data-zone="채팅 패널">
+    <header>채팅 <span>방송 채팅방</span></header>
+    <div class="log" id="log" data-zone="채팅 로그"></div>
+    <div class="composer" data-zone="입력 영역">
+      <div class="modes">
+        <button id="modeChat" class="on">💬 채팅</button>
+        <button id="modeDona">⚡ 후원 지시 (100)</button>
+        <span class="wallet">보유 <b id="wallet">1,000</b>⚡</span>
+      </div>
+      <div class="inputrow">
+        <input id="input" maxlength="60" placeholder="채팅을 입력하세요" autocomplete="off">
+        <button id="send">전송</button>
+      </div>
+      <div class="hint" id="hint">채팅은 무료지만 스트리머가 놓칠 수 있어요.</div>
+    </div>
+  </aside>
+</div>
+
+<dialog id="settings">
+  <h3>⚙ AI 스트리머 설정</h3>
+  <label>Gemini API 키
+    <input id="cfgKey" type="password" autocomplete="off" placeholder="비워 두면 더미 응답으로 동작">
+  </label>
+  <label>모델
+    <input id="cfgModel" autocomplete="off">
+  </label>
+  <label>프록시 주소 (선택 — 배포용. 입력하면 키 없이 이 주소로 요청)
+    <input id="cfgProxy" autocomplete="off" placeholder="https://...">
+  </label>
+  <p>키는 이 브라우저(localStorage)에만 저장되고 Google API로만 전송됩니다. 코드나 저장소에는 절대 적지 마세요.</p>
+  <div class="btns"><button id="cfgCancel">닫기</button><button class="primary" id="cfgSave">저장</button></div>
+</dialog>
+
+<script type="module" src="js/main.js"></script>
+</body>
+</html>
