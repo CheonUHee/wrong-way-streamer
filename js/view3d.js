@@ -1,16 +1,22 @@
 /* 3D 게임 화면(Three.js). 스트리머 한별의 1인칭 시점.
-   stage.js가 쓰는 함수: reset(stage), render(G, objects), moveTo(obj) → Promise, act(type, obj) → Promise
-   오브젝트는 KayKit · Tiny Treats 에셋(glTF). 바닥 타일은 에셋, 벽과 천장은 코드로 만든다(무료판에 맞는 벽이 없음). */
+   스테이지 데이터(js/stages/*.js)를 읽어 구역 하나씩 화면에 만든다. 규칙 판정은 core.js가 하고,
+   여기서는 보이는 것만 담당한다.
+
+   stage.js가 쓰는 함수
+     loadArea(stage, state, areaId, entryId)   구역을 새로 만들고 입구에 선다
+     render(stage, state)                      상태(플래그)에 맞춰 오브젝트 모습을 바꾼다
+     moveTo(objSpec) / act(kind, objSpec)      걸어가기 / 손 동작        (Promise)
+     transition(fn)                            화면을 어둡게 했다가 fn 실행 후 밝힌다 (Promise)
+     enemy(enemySpec, objSpec) / fall()        적 등장·공격 / 쓰러지기   (Promise) */
 import * as THREE from 'three';
 import { $ } from './ui.js';
-import { S, place, ownMaterials } from './assets.js';
+import { S, model, place, ownMaterials, clips } from './assets.js';
+import { objectsIn, cond } from './core.js';
 
 const EYE = 1.45;          // 눈높이(m)
 const WALK_SPEED = 2.2;    // 걷는 속도(m/s)
-const ROOM = { w: 10, d: 10, h: 3.5 };
-const COLOR = {            // KayKit 톤에 맞춘 파스텔 색
-  bg: 0x2a2433, wall: 0xf1dfcb, wainscot: 0xd9a98b, trim: 0xa8735a, ceil: 0xfaf3ea, frame: 0x8a5a44,
-};
+const ROOM_COLOR = { wall: 0xf1dfcb, wainscot: 0xd9a98b, trim: 0xa8735a, ceil: 0xfaf3ea, frame: 0x8a5a44 };
+const T = 0.2;             // 벽 두께
 
 /* ── 기본 세팅 ── */
 const host = $('scene');
@@ -20,9 +26,10 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 host.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(COLOR.bg);
-const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.01, 50);
+const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.01, 80);
 scene.add(camera);
+const envGroup = new THREE.Group(), objGroup = new THREE.Group(), enemyGroup = new THREE.Group();
+scene.add(envGroup, objGroup, enemyGroup);
 
 function resize() {
   const w = host.clientWidth, h = host.clientHeight;
@@ -32,124 +39,176 @@ function resize() {
 }
 new ResizeObserver(resize).observe(host);
 
-scene.add(new THREE.HemisphereLight(0xfff4e8, 0x8a7060, 2.2));
-const sun = new THREE.DirectionalLight(0xfff0dc, 1.6);
-sun.position.set(3, 6, 4); scene.add(sun);
-const ceilingLamp = new THREE.PointLight(0xffd9a0, 5, 0, 1.4);
-ceilingLamp.position.set(0, 2.7, 0); scene.add(ceilingLamp);
+const hemi = new THREE.HemisphereLight(0xfff4e8, 0x8a7060, 2.2);
+const sun = new THREE.DirectionalLight(0xfff0dc, 1.6); sun.position.set(3, 6, 4);
+const lamp = new THREE.PointLight(0xffd9a0, 5, 0, 1.4); lamp.position.set(0, 2.7, 0);
+scene.add(hemi, sun, lamp);
 
 const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...extra });
 const box = (w, h, d, m) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
+const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
+const wait = ms => new Promise(ok => setTimeout(ok, ms));
+function rng(seed) { return () => (seed = (seed * 16807) % 2147483647) / 2147483647; }
 
-/* ── 방(바닥 · 벽 · 천장) ── */
-// 바닥: 던전 팩의 나무 바닥 타일(4×4)을 방 크기에 맞춰 3×3으로 깐다
-const TILE = ROOM.w / 3;
-for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
-  place(scene, 'dungeon', 'floor_wood_large', { pos: [-ROOM.w / 2 + TILE * (i + 0.5), 0, -ROOM.d / 2 + TILE * (j + 0.5)], scale: TILE / 4 });
+/* ── 환경: 방 / 야외 ──
+   변(side): north(-z) south(+z) west(-x) east(+x). openings로 문·통로 자리를 비운다. */
+const SIDES = {
+  north: (w, d) => ({ along: 'x', len: w, fixed: -d / 2, rotY: 0 }),
+  south: (w, d) => ({ along: 'x', len: w, fixed: d / 2, rotY: Math.PI }),
+  west:  (w, d) => ({ along: 'z', len: d, fixed: -w / 2, rotY: Math.PI / 2 }),
+  east:  (w, d) => ({ along: 'z', len: d, fixed: w / 2, rotY: -Math.PI / 2 }),
+};
+const at = (side, u, y, fixed) => side.along === 'x' ? v3(u, y, fixed) : v3(fixed, y, u);
+// 한 변을 openings를 뺀 구간들로 나눈다 → [[시작, 끝]]
+function segments(len, openings = []) {
+  const holes = openings.map(o => [o.x - o.w / 2, o.x + o.w / 2]).sort((a, b) => a[0] - b[0]);
+  const out = []; let cur = -len / 2;
+  for (const [a, b] of holes) { if (a > cur) out.push([cur, a]); cur = Math.max(cur, b); }
+  if (cur < len / 2) out.push([cur, len / 2]);
+  return out;
 }
-const under = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, ROOM.d), mat(0x7a5a44));   // 타일 로딩 전·틈 가림
-under.rotation.x = -Math.PI / 2; under.position.y = -0.05; scene.add(under);
-const ceil = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, ROOM.d), mat(COLOR.ceil));
-ceil.rotation.x = Math.PI / 2; ceil.position.y = ROOM.h; scene.add(ceil);
 
-const T = 0.2, DOOR_W = 1.6 * S, DOOR_H = 2.8 * S;      // 문 크기 = Bubbly Bathroom door_modular
-function wallPiece(w, h, d, x, y, z) {
-  // 벽 위쪽은 크림색, 아래 1m는 진한 색(징두리) + 경계 몰딩
-  const g = new THREE.Group(); g.position.set(x, y, z); scene.add(g);
-  const top = box(w, h, d, mat(COLOR.wall)); g.add(top);
-  const lowH = Math.min(1, Math.max(0, 1 - (y - h / 2)));
-  if (lowH > 0) {
-    const low = box(w + 0.02, lowH, d + 0.02, mat(COLOR.wainscot)); low.position.y = -h / 2 + lowH / 2; g.add(low);
-    const rail = box(w + 0.04, 0.06, d + 0.04, mat(COLOR.trim)); rail.position.y = -h / 2 + lowH; g.add(rail);
+function buildRoom(env) {
+  const { w, d, h } = env, C = { ...ROOM_COLOR, ...(env.colors || {}) };
+  if (env.floor) {
+    const n = Math.max(1, Math.round(w / 3.3)), m = Math.max(1, Math.round(d / 3.3)), tw = w / n, td = d / m;
+    for (let i = 0; i < n; i++) for (let j = 0; j < m; j++)
+      place(envGroup, env.floor.pack, env.floor.name, { pos: [-w / 2 + tw * (i + 0.5), 0, -d / 2 + td * (j + 0.5)], scale: Math.max(tw, td) / 4 });
+  }
+  const under = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat(env.floorColor || 0x7a5a44));
+  under.rotation.x = -Math.PI / 2; under.position.y = env.floor ? -0.05 : 0; envGroup.add(under);
+  const ceil = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat(C.ceil));
+  ceil.rotation.x = Math.PI / 2; ceil.position.y = h; envGroup.add(ceil);
+
+  for (const [name, mk] of Object.entries(SIDES)) {
+    const side = mk(w, d), opens = env.openings?.[name] || [];
+    const piece = (u0, u1, y0, y1) => {
+      const len = u1 - u0, hh = y1 - y0; if (len <= 0.01 || hh <= 0.01) return;
+      const g = new THREE.Group(); g.position.copy(at(side, (u0 + u1) / 2, (y0 + y1) / 2, side.fixed + Math.sign(side.fixed) * T / 2));
+      if (side.along === 'z') g.rotation.y = Math.PI / 2;
+      g.add(box(len, hh, T, mat(C.wall)));
+      const lowH = Math.min(1, y1) - y0;                // 아래 1m는 징두리 + 몰딩
+      if (lowH > 0) {
+        const low = box(len + 0.02, lowH, T + 0.02, mat(C.wainscot)); low.position.y = -hh / 2 + lowH / 2; g.add(low);
+        const rail = box(len + 0.04, 0.06, T + 0.04, mat(C.trim)); rail.position.y = -hh / 2 + lowH; g.add(rail);
+      }
+      envGroup.add(g);
+    };
+    for (const [a, b] of segments(side.len, opens)) piece(a, b, 0, h);
+    for (const o of opens) {
+      piece(o.x - o.w / 2, o.x + o.w / 2, o.h || 2.3, h);          // 개구부 위 벽
+      const glow = new THREE.Mesh(new THREE.PlaneGeometry(o.w * 3, (o.h || 2.3) * 2), new THREE.MeshBasicMaterial({ color: 0xfff6d8 }));
+      glow.position.copy(at(side, o.x, (o.h || 2.3) / 2, side.fixed + Math.sign(side.fixed) * 1.6));
+      glow.rotation.y = side.along === 'z' ? Math.PI / 2 : 0; envGroup.add(glow);
+    }
   }
 }
-const walls = [
-  [ROOM.w, ROOM.h, T, 0, ROOM.h / 2, ROOM.d / 2],          // 뒤
-  [T, ROOM.h, ROOM.d, -ROOM.w / 2, ROOM.h / 2, 0],         // 왼쪽
-  [T, ROOM.h, ROOM.d, ROOM.w / 2, ROOM.h / 2, 0],          // 오른쪽
-  // 정면 벽: 문 구멍을 남기고 세 조각
-  [(ROOM.w - DOOR_W) / 2, ROOM.h, T, -(ROOM.w + DOOR_W) / 4, ROOM.h / 2, -ROOM.d / 2],
-  [(ROOM.w - DOOR_W) / 2, ROOM.h, T, (ROOM.w + DOOR_W) / 4, ROOM.h / 2, -ROOM.d / 2],
-  [DOOR_W, ROOM.h - DOOR_H, T, 0, (ROOM.h + DOOR_H) / 2, -ROOM.d / 2],
-];
-for (const w of walls) wallPiece(...w);
-// 문 밖에서 새어 드는 빛(문이 열리면 보인다)
-const outside = new THREE.Mesh(new THREE.PlaneGeometry(DOOR_W * 4, DOOR_H * 2), new THREE.MeshBasicMaterial({ color: 0xfff6d8 }));
-outside.position.set(0, DOOR_H / 2, -ROOM.d / 2 - 1.6); scene.add(outside);
 
-// 장식(AI에게는 알리지 않는 배경 소품). 동선을 막지 않게 벽과 구석에만 둔다.
-const DECOR = [
-  ['furniture', 'rug_rectangle_stripes_A', [0, 0.01, 0.2], Math.PI / 2],
-  ['furniture', 'armchair_pillows',    [-3.9, 0, 3.9],           Math.PI * 0.75],
-  ['furniture', 'lamp_standing',       [4.4, 0, 4.4],            0],
-  ['furniture', 'couch_pillows',       [1.2, 0, 4.35],           Math.PI],
-  ['furniture', 'pictureframe_large_A',[-4.9 + T / 2, 1.9, 1.6], Math.PI / 2],
-  ['furniture', 'pictureframe_medium', [4.9 - T / 2, 1.8, -0.5], -Math.PI / 2],
-  ['bath',      'plant',               [1.5, 0, -4.4],           0],
-  ['furniture', 'cactus_medium_A',     [-1.5, 0, -4.5],          0],
-];
-for (const [p, n, pos, rotY] of DECOR) place(scene, p, n, { pos, rotY });
-
-/* ── 오브젝트 ── */
-const OBJ = {};          // id → { root, ...애니메이션용 부품 }
-const BUILD = {
-  door(o) {
-    const root = new THREE.Group();
-    const frameMat = mat(COLOR.frame);
-    for (const [w, h, x, y] of [[0.12, DOOR_H, -DOOR_W / 2 - 0.06, DOOR_H / 2], [0.12, DOOR_H, DOOR_W / 2 + 0.06, DOOR_H / 2], [DOOR_W + 0.24, 0.12, 0, DOOR_H + 0.06]]) {
-      const f = box(w, h, 0.34, frameMat); f.position.set(x, y, 0); root.add(f);
+function buildOutdoor(env) {
+  const { w, d } = env, r = rng(w * 131 + d * 7 + (env.ground || 0) % 997);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(w + 40, d + 40), mat(env.ground || 0x4f6b45));
+  ground.rotation.x = -Math.PI / 2; envGroup.add(ground);
+  const inner = new THREE.Mesh(new THREE.CircleGeometry(Math.min(w, d) * 0.45, 32), mat(new THREE.Color(env.ground || 0x4f6b45).offsetHSL(0, -0.05, 0.04)));
+  inner.rotation.x = -Math.PI / 2; inner.position.y = 0.005; envGroup.add(inner);
+  // 경계 울타리(통로 자리는 비운다)
+  const seg = 4 * S;
+  for (const [name, mk] of Object.entries(SIDES)) {
+    const side = mk(w, d);
+    for (const [a, b] of segments(side.len, env.openings?.[name])) {
+      const n = Math.max(1, Math.round((b - a) / seg)), sc = (b - a) / n / 4;
+      for (let i = 0; i < n; i++) {
+        const u = a + (b - a) * (i + 0.5) / n;
+        place(envGroup, 'halloween', env.border === 'fence' && r() < 0.15 ? 'fence_broken' : 'fence',
+          { pos: at(side, u, 0, side.fixed).toArray(), rotY: side.rotY, scale: sc });
+      }
     }
-    const hinge = new THREE.Group(); hinge.position.set(-DOOR_W / 2, 0, 0); root.add(hinge);
-    place(hinge, 'bath', 'door_modular');                     // 모델 원점이 경첩 쪽 모서리
-    root.position.set(o.pos[0], 0, o.pos[2]);
-    return { root, hinge, open: 0 };
-  },
-  lever(o) {             // 레버 에셋이 없어 코드로 만든다
-    const root = new THREE.Group();
-    root.add(box(0.06, 0.5, 0.34, mat(COLOR.frame)));
-    const pivot = new THREE.Group(); pivot.position.x = 0.05; root.add(pivot);
-    const armMat = mat(0x9a6a48, { metalness: 0.3, roughness: 0.95 });         // 녹슨 색 → 기름칠하면 은색
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.44, 10), armMat); arm.position.y = 0.22; pivot.add(arm);
-    const grip = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 12), mat(0xff6f6f)); grip.position.y = 0.46; pivot.add(grip);
-    root.position.set(o.pos[0] + T / 2, o.pos[1], o.pos[2]);
-    return { root, pivot, armMat, down: 0 };
-  },
-  oil(o) {
-    const root = new THREE.Group();
-    place(root, 'furniture', 'cabinet_small');                // 높이 0.8
-    const can = new THREE.Group(); can.position.y = 0.8; root.add(can);
-    place(can, 'proto', 'Can_A').then(m => {                  // 빨간 통으로 칠한다
-      if (m) ownMaterials(m).traverse(x => { if (x.isMesh) x.material.color.set(0xff4a3d); });
+    // 울타리 밖 나무(배경)
+    for (let u = -side.len / 2 - 2; u <= side.len / 2 + 2; u += 2.6 + r() * 1.5) {
+      const off = 1.6 + r() * 2.5;
+      const tree = env.dim ? ['halloween', r() < 0.5 ? 'tree_dead_large' : 'tree_dead_medium'] : ['forest', r() < 0.5 ? 'Tree_1_A_Color1' : 'Tree_2_A_Color1'];
+      place(envGroup, tree[0], tree[1], { pos: at(side, u, 0, side.fixed + Math.sign(side.fixed) * off).toArray(), rotY: r() * 6.28, scale: S * (0.8 + r() * 0.5) });
+    }
+  }
+}
+
+function setLighting(env) {
+  if (env.kind === 'outdoor') {
+    scene.background = new THREE.Color(env.sky || 0x1d1b33);
+    scene.fog = new THREE.Fog(env.sky || 0x1d1b33, 10, 30);
+    hemi.color.set(0xc4ccff); hemi.groundColor.set(0x2e3a26); hemi.intensity = env.dim ? 0.9 : 1.5;
+    sun.color.set(0xcfd8ff); sun.intensity = env.dim ? 0.5 : 1.0; sun.position.set(-4, 8, 3);
+    lamp.intensity = 0;
+  } else {
+    scene.background = new THREE.Color(0x2a2433); scene.fog = null;
+    hemi.color.set(0xfff4e8); hemi.groundColor.set(0x8a7060); hemi.intensity = env.dim ? 1.2 : 2.2;
+    sun.color.set(0xfff0dc); sun.intensity = 1.6; sun.position.set(3, 6, 4);
+    lamp.intensity = env.dim ? 2 : 5; lamp.position.set(0, env.h - 0.8, 0);
+  }
+}
+
+/* ── 오브젝트 ──
+   spec.kind: door(문틀+경첩) · gate(양쪽 문짝) · lever(코드로 만든 레버) · chest(뚜껑) · sign(표지판+그림) · 생략(모델 하나)
+   spec.fx: { glow: {color, intensity, offWhen}, sparkle: {offWhen}, anim: 'dance'|'bob'|'spin' } */
+const OBJ = {};
+function labelPlane(text, color = '#2a1a12', w = 0.8, h = 0.48) {
+  const c = document.createElement('canvas'); c.width = 256; c.height = 154;
+  const g = c.getContext('2d');
+  g.fillStyle = '#d9b98a'; g.fillRect(0, 0, 256, 154);
+  g.fillStyle = color; g.font = 'bold 96px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+  g.fillText(text, 128, 82);
+  const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
+  return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: t, roughness: 0.9 }));
+}
+function buildObject(o) {
+  const root = new THREE.Group(), e = { spec: o, root, open: 0, down: 0, mats: [] };
+  const m = o.model || {};
+  const loadModel = (parent, extra = {}) => m.name ? place(parent, m.pack, m.name, { scale: m.scale ?? S, rotY: m.rotY || 0, pos: m.offset || [0, 0, 0], ...extra }) : Promise.resolve(null);
+  const afterLoad = mod => {
+    if (!mod) return;
+    if (m.tint || o.fx?.glow) ownMaterials(mod);
+    mod.traverse(x => {
+      if (!x.isMesh) return;
+      if (m.tint) x.material.color.set(m.tint);
+      if (o.fx?.glow) { x.material.emissive = new THREE.Color(o.fx.glow.color).multiplyScalar(0.45); e.mats.push(x.material); }
     });
-    root.position.set(o.pos[0], 0, o.pos[2]); root.rotation.y = Math.PI / 4;
-    return { root, can };
-  },
-  box(o) {
-    const root = new THREE.Group();
-    const e = { root, open: 0, mats: [] };
-    place(root, 'dungeon', 'chest_gold', { scale: 0.5 }).then(m => {
-      if (!m) return;
-      ownMaterials(m).traverse(x => { if (x.isMesh) { x.material.emissive = new THREE.Color(0x7a5200); e.mats.push(x.material); } });
-      e.lid = m.getObjectByName('chest_gold_lid');
+  };
+
+  if (o.kind === 'door') {
+    const W = 1.6 * (m.scale ?? S), H = 2.8 * (m.scale ?? S), fm = mat(ROOM_COLOR.frame);
+    for (const [w, h, x, y] of [[0.12, H, -W / 2 - 0.06, H / 2], [0.12, H, W / 2 + 0.06, H / 2], [W + 0.24, 0.12, 0, H + 0.06]]) {
+      const f = box(w, h, 0.34, fm); f.position.set(x, y, 0); root.add(f);
+    }
+    e.hinge = new THREE.Group(); e.hinge.position.set(-W / 2, 0, 0); root.add(e.hinge);
+    loadModel(e.hinge).then(afterLoad);                     // door_modular: 원점이 경첩 쪽 모서리
+  } else if (o.kind === 'lever') {
+    root.add(box(0.06, 0.5, 0.34, mat(ROOM_COLOR.frame)));
+    e.pivot = new THREE.Group(); e.pivot.position.x = 0.05; root.add(e.pivot);
+    e.armMat = mat(0x9a6a48, { metalness: 0.3, roughness: 0.95 });
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.44, 10), e.armMat); arm.position.y = 0.22; e.pivot.add(arm);
+    const grip = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 12), mat(0xff6f6f)); grip.position.y = 0.46; e.pivot.add(grip);
+  } else if (o.kind === 'sign') {
+    const wood = mat(0x8a5a3c);
+    const post = box(0.1, 1.5, 0.1, wood); post.position.y = 0.75; root.add(post);
+    const board = box(0.9, 0.56, 0.06, wood); board.position.y = 1.38; root.add(board);
+    if (o.label) { const p = labelPlane(o.label.text, o.label.color); p.position.set(0, 1.38, 0.035); root.add(p); }
+  } else {
+    loadModel(root).then(mod => {
+      afterLoad(mod);
+      if (!mod) return;
+      if (o.kind === 'chest') mod.traverse(x => { if (/_lid$/.test(x.name)) e.lid = x; });
+      if (o.kind === 'gate') { e.leaves = []; mod.traverse(x => { if (/_(left|right)$/.test(x.name)) e.leaves.push(x); }); }
     });
-    e.glow = new THREE.PointLight(0xffd65a, 3, 4, 2); e.glow.position.y = 0.9; root.add(e.glow);
+  }
+  if (o.fx?.glow) { e.glow = new THREE.PointLight(o.fx.glow.color, o.fx.glow.intensity ?? 3, 4, 2); e.glow.position.y = 0.8; root.add(e.glow); }
+  if (o.fx?.sparkle) {
     e.sparkles = new THREE.Group(); root.add(e.sparkles);
     const spMat = new THREE.MeshBasicMaterial({ color: 0xfff6b0 });
     for (let i = 0; i < 6; i++) { const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.035), spMat); s.userData.phase = i; e.sparkles.add(s); }
-    root.position.set(o.pos[0], 0, o.pos[2]); root.rotation.y = Math.PI * 0.15;
-    return e;
-  },
-  duck(o) {
-    const root = new THREE.Group();
-    const body = new THREE.Group(); root.add(body);
-    place(body, 'bath', 'ducky', { scale: 1.8 });             // 큰 고무 오리(높이 약 0.7)
-    root.position.set(o.pos[0], 0, o.pos[2]); root.rotation.y = -Math.PI * 0.75;   // 방 가운데 쪽을 본다
-    return { root, body };
-  },
-};
-function buildObjects(stage) {
-  for (const k in OBJ) { scene.remove(OBJ[k].root); delete OBJ[k]; }
-  for (const o of stage.objects) { OBJ[o.id] = (BUILD[o.id] || BUILD.box)(o); scene.add(OBJ[o.id].root); }
+  }
+  e.body = root;
+  root.position.set(...o.pos); root.rotation.y = o.rotY || 0;
+  objGroup.add(root);
+  return e;
 }
 
 /* ── 1인칭 손(한별: 흰 니트 가디건 + 초록 소맷단) ── */
@@ -170,25 +229,52 @@ function makeArm(side) {
 }
 const arms = { r: makeArm(1), l: makeArm(-1) };
 
-/* ── 이동 · 시선 · 손 동작 ── */
-let walk = null;            // { path: [Vector3...], done: resolve }
-let anim = null;            // { t, dur, kind, done }
-let focus = new THREE.Vector3();         // 지금 보고 있어야 할 지점
-let glance = null;          // 한눈팔기 시선 { at, until }
-let idleSince = 0, nextGlance = 4;
-let objectsNow = [];
+/* ── 상태 ── */
+let walk = null, anim = null, glance = null, idleSince = 0, nextGlance = 4;
+let focus = new THREE.Vector3(), objectsNow = [];
+let foe = null, falling = null, shake = 0;
+const mixers = [];
 const lookQ = new THREE.Quaternion(), tmp = new THREE.PerspectiveCamera();   // 카메라 기준 lookAt(-z가 정면)
-
-const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
 function finishWalk() { if (walk) { const d = walk.done; walk = null; d(); } }
 function finishAct() { if (anim) { const d = anim.done; anim = null; d(); } }
 
-// 바닥에 놓인 오브젝트를 피해 가는 간단한 경유점 계산
+export function loadArea(stage, s, areaId, entryId) {
+  finishWalk(); finishAct(); glance = null; foe = null; falling = null; shake = 0;
+  for (const g of [envGroup, objGroup, enemyGroup]) g.clear();
+  mixers.length = 0;
+  for (const k in OBJ) delete OBJ[k];
+  const area = stage.areas[areaId];
+  setLighting(area.env);
+  (area.env.kind === 'outdoor' ? buildOutdoor : buildRoom)(area.env);
+  for (const [p, n, pos, rotY = 0, scale = S] of area.decor || []) place(envGroup, p, n, { pos, rotY, scale });
+  for (const o of stage.objects.filter(o => o.area === areaId)) OBJ[o.id] = buildObject(o);
+  const ent = area.entries[entryId] || Object.values(area.entries)[0];
+  camera.position.set(ent.pos[0], EYE, ent.pos[1]);
+  focus.set(...ent.look);
+  tmp.position.copy(camera.position); tmp.lookAt(focus); camera.quaternion.copy(tmp.quaternion);
+  arms.r.visible = arms.l.visible = true;
+  render(stage, s); resize();
+}
+
+export function render(stage, s) {
+  const vis = objectsIn(stage, s);
+  objectsNow = vis.map(o => o);
+  const ids = new Set(vis.map(o => o.id));
+  for (const e of Object.values(OBJ)) {
+    const o = e.spec, on = c => !!c && cond(s, c);
+    e.root.visible = ids.has(o.id);
+    e.target = on(o.openWhen) || on(o.downWhen) ? 1 : 0;
+    if (e.armMat) { const shiny = on(o.shinyWhen); e.armMat.color.set(shiny ? 0xd5dbe6 : 0x9a6a48); e.armMat.metalness = shiny ? 0.9 : 0.3; }
+    e.fxOff = { glow: on(o.fx?.glow?.offWhen), sparkle: on(o.fx?.sparkle?.offWhen) };
+  }
+}
+
+// 대상 쪽으로 고개를 홱 돌린 뒤(호기심 연출), 대상 앞까지 걸어간다.
 function planPath(from, to, targetId) {
   const path = [to];
   for (const o of objectsNow) {
-    if (o.id === targetId || o.pos[1] > 0.5) continue;               // 벽에 붙은 것은 무시
-    const c = v3(o.pos[0], EYE, o.pos[2]), r = 0.9;
+    if (o.id === targetId || o.solid === false || o.pos[1] > 0.5) continue;
+    const c = v3(o.pos[0], EYE, o.pos[2]), r = o.r || 0.9;
     const seg = to.clone().sub(from), len = seg.length(); if (len < 0.01) continue;
     const dir = seg.clone().divideScalar(len);
     const t = THREE.MathUtils.clamp(c.clone().sub(from).dot(dir), 0, len);
@@ -202,52 +288,71 @@ function planPath(from, to, targetId) {
   }
   return path;
 }
-
-export function reset(stage) {
-  finishWalk(); finishAct(); glance = null;
-  buildObjects(stage);
-  camera.position.set(stage.start.pos[0], EYE, stage.start.pos[1]);
-  focus.set(...stage.start.look);
-  tmp.position.copy(camera.position); tmp.lookAt(focus); camera.quaternion.copy(tmp.quaternion);
-  resize();
-}
-
-export function render(G, objects) {
-  objectsNow = objects;
-  if (OBJ.door) OBJ.door.target = G.doorOpen ? 1 : 0;
-  if (OBJ.lever) { OBJ.lever.target = G.doorOpen ? 1 : 0; OBJ.lever.armMat.color.set(G.oiled ? 0xd5dbe6 : 0x9a6a48); OBJ.lever.armMat.metalness = G.oiled ? 0.9 : 0.3; }
-  if (OBJ.box) OBJ.box.target = G.boxOpened ? 1 : 0;
-  if (OBJ.oil) OBJ.oil.can.visible = !G.oilTaken;
-  $('clear').classList.toggle('show', G.cleared);
-}
-
-// 대상 쪽으로 고개를 홱 돌린 뒤(호기심 연출), 대상 앞까지 걸어간다.
 export function moveTo(o) {
   finishWalk(); glance = null;
   focus.set(...o.look);
   return new Promise(done => {
-    const to = v3(o.stand[0], EYE, o.stand[1]);
-    walk = { path: planPath(camera.position.clone(), to, o.id), wait: 0.35, done };
+    walk = { path: planPath(camera.position.clone(), v3(o.stand[0], EYE, o.stand[1]), o.id), wait: 0.35, done };
   });
 }
-
-// 손 동작: interact/use = 앞으로 뻗기, pickup = 아래로 뻗어 집기, move = 없음
-export function act(type, o) {
-  if (type === 'move') return Promise.resolve();
+// 손 동작: interact/use = 앞으로 뻗기, pickup = 아래로 뻗어 집기
+export function act(kind, o) {
+  if (kind === 'move') return Promise.resolve();
   finishAct();
-  return new Promise(done => { anim = { t: 0, dur: type === 'pickup' ? 0.7 : 0.55, kind: type, obj: o.id, done }; });
+  return new Promise(done => { anim = { t: 0, dur: kind === 'pickup' ? 0.7 : 0.55, kind, obj: o.id, done }; });
+}
+
+export async function transition(fn) {
+  const f = $('fade');
+  f.classList.add('on'); await wait(380);
+  await fn(); await wait(120);
+  f.classList.remove('on'); await wait(380);
+}
+
+// 적 등장 → 달려와서 → 한 대 친다. 맞는 순간에 끝난다.
+export async function enemy(spec, objSpec) {
+  const [m, C] = await Promise.all([model(spec.model.pack, spec.model.name, spec.model.scale ?? S), clips()]);
+  const root = new THREE.Group(); root.add(m); enemyGroup.add(root);
+  const [sx, sz] = spec.spawn || [objSpec.pos[0] + 1.2, objSpec.pos[2]];
+  root.position.set(sx, 0, sz);
+  root.lookAt(camera.position.x, 0, camera.position.z);
+  const mixer = new THREE.AnimationMixer(m); mixers.push(mixer);
+  const play = (name, once) => {
+    mixer.stopAllAction();
+    const a = mixer.clipAction(C[name]); a.reset();
+    if (once) { a.setLoop(THREE.LoopOnce); a.clampWhenFinished = true; }
+    a.play(); return a;
+  };
+  foe = { root };
+  play('Spawn_Ground', true); await wait(1150);
+  play('Running_A');
+  await new Promise(done => { foe.run = { speed: 3.2, stop: 1.1, done }; });
+  play('Throw', true); await wait(520);
+  shake = 0.5; $('hit').classList.add('on'); setTimeout(() => $('hit').classList.remove('on'), 450);
+  await wait(250);
+}
+export function fall() {
+  arms.r.visible = arms.l.visible = false;
+  return new Promise(done => { falling = { t: 0, done }; });
 }
 
 /* ── 매 프레임 ── */
 const clock = new THREE.Clock();
 let bob = 0;
-function frame() {
-  const dt = Math.min(clock.getDelta(), 0.05), t = clock.elapsedTime;
+const rollQ = new THREE.Quaternion(), Z = v3(0, 0, 1);
+let lastStep = 0;
+function frame() { step(0.05); requestAnimationFrame(frame); }
+// 화면이 가려져 requestAnimationFrame이 멈춰도 걷기·연출이 끝나도록 타이머로 대신 진행한다
+setInterval(() => { if (performance.now() - lastStep > 250) step(0.3); }, 200);
+function step(maxDt) {
+  lastStep = performance.now();
+  const dt = Math.min(clock.getDelta(), maxDt), t = clock.elapsedTime;
+  mixers.forEach(m => m.update(dt));
 
   // 걷기
   let walking = false;
   if (walk) {
-    if (walk.wait > 0) walk.wait -= dt;                   // 고개 먼저 돌리는 시간
+    if (walk.wait > 0) walk.wait -= dt;
     else {
       const next = walk.path[0], step = WALK_SPEED * dt;
       const d = next.clone().sub(camera.position); d.y = 0;
@@ -258,31 +363,50 @@ function frame() {
     }
   }
   bob += dt * (walking ? 9 : 0);
-  camera.position.y = EYE + (walking ? Math.abs(Math.sin(bob)) * 0.04 : 0);
+  let eyeY = EYE + (walking ? Math.abs(Math.sin(bob)) * 0.04 : 0);
+
+  // 적: 카메라 쪽으로 달려온다
+  if (foe?.run) {
+    const p = foe.root.position, d = v3(camera.position.x - p.x, 0, camera.position.z - p.z), dist = d.length();
+    if (dist <= foe.run.stop) { const done = foe.run.done; foe.run = null; done(); }
+    else p.addScaledVector(d.normalize(), Math.min(foe.run.speed * dt, dist - foe.run.stop));
+    foe.root.lookAt(camera.position.x, 0, camera.position.z);
+  }
 
   // 한눈팔기: 가만히 있으면 가끔 다른 물건 쪽을 힐끔 본다
-  if (walking || anim) idleSince = t;
-  if (!glance && !walk && !anim && t - idleSince > nextGlance && objectsNow.length > 1) {
+  if (walking || anim || foe || falling) idleSince = t;
+  if (!glance && !walk && !anim && !foe && !falling && t - idleSince > nextGlance && objectsNow.length > 1) {
     const o = objectsNow[Math.floor(Math.random() * objectsNow.length)];
     glance = { at: v3(...o.look), until: t + 1.3 };
     nextGlance = 4 + Math.random() * 4; idleSince = t;
   }
   if (glance && t > glance.until) glance = null;
 
-  // 시선: 걷기 시작 전에는 빠르게(홱), 평소에는 부드럽게
-  tmp.position.copy(camera.position); tmp.lookAt(glance ? glance.at : focus);
+  // 시선
+  const target = foe ? v3(foe.root.position.x, 1.2, foe.root.position.z) : glance ? glance.at : focus;
+  tmp.position.copy(camera.position); tmp.lookAt(target);
   lookQ.copy(tmp.quaternion);
-  const k = walk && walk.wait > 0 ? 14 : glance ? 6 : 4;
+  if (falling) {
+    falling.t += dt;
+    const p = Math.min(falling.t / 0.9, 1), e = p * p;
+    eyeY = THREE.MathUtils.lerp(EYE, 0.35, e);
+    lookQ.multiply(rollQ.setFromAxisAngle(Z, 1.2 * e));
+    if (p >= 1 && falling.done) { const d = falling.done; falling.done = null; d(); }
+  }
+  const k = falling ? 12 : foe ? 10 : walk && walk.wait > 0 ? 14 : glance ? 6 : 4;
   camera.quaternion.slerp(lookQ, 1 - Math.exp(-k * dt));
+  camera.position.y = eyeY;
+  if (shake > 0) {
+    shake = Math.max(0, shake - dt);
+    camera.position.x += (Math.random() - 0.5) * shake * 0.25; camera.position.y += (Math.random() - 0.5) * shake * 0.25;
+  }
 
   // 손
   let reach = 0, down = 0;
   if (anim) {
     anim.t += dt;
-    const p = Math.min(anim.t / anim.dur, 1);
-    const s = Math.sin(p * Math.PI);
-    if (anim.kind === 'pickup') { reach = s * 0.18; down = s * 0.14; if (p > 0.5 && anim.obj === 'oil' && OBJ.oil) OBJ.oil.can.visible = false; }
-    else reach = s * 0.22;
+    const p = Math.min(anim.t / anim.dur, 1), s = Math.sin(p * Math.PI);
+    if (anim.kind === 'pickup') { reach = s * 0.18; down = s * 0.14; } else reach = s * 0.22;
     if (p >= 1) finishAct();
   }
   for (const [key, arm] of Object.entries(arms)) {
@@ -294,24 +418,30 @@ function frame() {
 
   // 오브젝트 애니메이션
   const ease = (cur, tgt, sp) => cur + (tgt - cur) * (1 - Math.exp(-sp * dt));
-  if (OBJ.door) { const d = OBJ.door; d.open = ease(d.open, d.target || 0, 2.5); d.hinge.rotation.y = 1.45 * d.open; outside.visible = d.open > 0.02; }   // 바깥쪽으로 열린다(방 안으로 열면 문짝이 시야를 가림)
-  if (OBJ.lever) { const l = OBJ.lever; l.down = ease(l.down, l.target || 0, 8); l.pivot.rotation.z = -0.35 - 2.3 * l.down; }
-  if (OBJ.box) {
-    const b = OBJ.box; b.open = ease(b.open, b.target || 0, 4);
-    if (b.lid) b.lid.rotation.x = -1.7 * b.open;
-    b.glow.intensity = (1 - b.open) * (2.5 + Math.sin(t * 4) * 1.2);
-    for (const m of b.mats) m.emissiveIntensity = (1 - b.open) * (0.6 + Math.sin(t * 4) * 0.35);
-    b.sparkles.visible = b.open < 0.5;
-    b.sparkles.children.forEach(s => {
-      const a = t * 1.4 + s.userData.phase * 1.05;
-      s.position.set(Math.cos(a) * 0.45, 0.5 + Math.sin(a * 1.7) * 0.15, Math.sin(a) * 0.35);
-      s.rotation.y = t * 3;
-    });
+  for (const e of Object.values(OBJ)) {
+    const o = e.spec;
+    e.open = ease(e.open, e.target || 0, o.kind === 'lever' ? 8 : 2.5);
+    if (e.hinge) e.hinge.rotation.y = 1.45 * e.open;                      // 문은 바깥쪽으로 열린다
+    if (e.pivot) e.pivot.rotation.z = -0.35 - 2.3 * e.open;
+    if (e.lid) e.lid.rotation.x = -1.7 * e.open;
+    if (e.leaves) e.leaves.forEach(l => { l.rotation.y = (/_left$/.test(l.name) ? 1 : -1) * 1.4 * e.open; });
+    const glowOn = e.fxOff ? !e.fxOff.glow && !(o.kind === 'chest' && e.open > 0.5) : true;
+    if (e.glow) e.glow.intensity = glowOn ? (o.fx.glow.intensity ?? 3) * (0.8 + Math.sin(t * 4) * 0.35) : 0;
+    for (const m of e.mats) m.emissiveIntensity = glowOn ? 0.6 + Math.sin(t * 4) * 0.35 : 0;
+    if (e.sparkles) {
+      e.sparkles.visible = !e.fxOff?.sparkle && !(o.kind === 'chest' && e.open > 0.5);
+      e.sparkles.children.forEach(sp => {
+        const a = t * 1.4 + sp.userData.phase * 1.05;
+        sp.position.set(Math.cos(a) * 0.45, 0.5 + Math.sin(a * 1.7) * 0.15, Math.sin(a) * 0.35); sp.rotation.y = t * 3;
+      });
+    }
+    const body = e.root.children.find(c => c.isObject3D && c.type !== 'PointLight' && c !== e.sparkles) || e.root;
+    if (o.fx?.anim === 'dance') { body.rotation.z = Math.sin(t * 6) * 0.22; body.rotation.y = Math.sin(t * 1.5) * 0.6; body.position.y = Math.abs(Math.sin(t * 6)) * 0.08; }
+    if (o.fx?.anim === 'bob') { body.position.y = Math.abs(Math.sin(t * 3.5)) * 0.15; body.scale.y = (o.model?.scale ?? S) * (1 + Math.sin(t * 7) * 0.04); }
+    if (o.fx?.anim === 'spin') body.rotation.y = t * 1.5;
   }
-  if (OBJ.duck) { const c = OBJ.duck.body; c.rotation.z = Math.sin(t * 6) * 0.22; c.rotation.y = Math.sin(t * 1.5) * 0.6; c.position.y = Math.abs(Math.sin(t * 6)) * 0.08; }
 
   renderer.render(scene, camera);
-  requestAnimationFrame(frame);
 }
 resize();
 requestAnimationFrame(frame);

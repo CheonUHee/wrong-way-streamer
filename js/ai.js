@@ -1,6 +1,6 @@
 /* AI 스트리머 두뇌: 설정(API 키 · 모델), 프롬프트, Gemini 호출, 키가 없을 때의 더미 응답 */
-import { $, addLine, pick, inv } from './ui.js';
-import { STAGE, NAME, DESC, G, visible } from './stage.js';
+import { $, addLine, pick } from './ui.js';
+import { context, visibleObjects, state } from './stage.js';
 
 let onConfigChange = () => {};
 export const setOnConfigChange = fn => { onConfigChange = fn; };
@@ -10,7 +10,9 @@ export const DEFAULT_MODEL = 'gemini-3.1-flash-lite';
 export const cfg = { key: '', model: DEFAULT_MODEL, proxy: '' };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('wws.cfg') || '{}')); } catch {}
 if (!cfg.model || cfg.model === 'gemini-3.5-flash-lite') cfg.model = DEFAULT_MODEL;   // 이전 기본값으로 저장된 설정을 새 기본값으로 교체
-export const aiOn = () => !!(cfg.key || cfg.proxy);
+// 주소 뒤에 ?ai=off 를 붙이면 키가 저장돼 있어도 더미 응답으로 동작한다(개발·테스트용, 비용 없음)
+const FORCE_OFF = new URLSearchParams(location.search).get('ai') === 'off';
+export const aiOn = () => !FORCE_OFF && !!(cfg.key || cfg.proxy);
 function refreshChip() {
   $('aiChip').textContent = aiOn() ? `AI 켜짐 · ${cfg.model}` : 'AI 꺼짐 (더미 응답)';
   $('aiChip').classList.toggle('on', aiOn());
@@ -48,21 +50,25 @@ export const SYSTEM = `너는 인터넷 방송 플랫폼 '지지직(Zizizik)'에
 - use: 인벤토리의 item을 target에 사용한다
 - idle: 제자리에서 말만 한다
 target은 '보이는 오브젝트'의 id 중 하나, item은 인벤토리에 있는 아이템 이름이어야 한다.
+아치·통로·문처럼 다른 곳으로 이어지는 오브젝트로 move나 interact를 하면 그곳으로 넘어간다. 보이는 오브젝트는 지금 있는 구역의 것만이다.
+[죽음] 이 게임에서는 위험한 곳에 가면 쓰러지고, 마지막으로 들어온 구역 입구에서 다시 시작한다. [죽은 기록]에 적힌 일은 기억하고 있어서 대사로 무서워하거나 억울해하지만, 호기심이 이기면 또 가 보고 싶어 하기도 한다. 시청자가 말리면 대체로 듣는다.
 [출력] 아래 형식의 JSON 하나만 출력한다.
 {"line": "스트리머 대사", "emotion": "normal|happy|shout|angry|sad", "action": {"type": "move|interact|pickup|use|idle", "target": "오브젝트 id 또는 null", "item": "아이템 이름 또는 null"}, "viewers": ["방금 장면에 대한 다른 시청자의 짧은 채팅 1~2개"]}`;
 
 const ENGLISH_RATE = 0.3;           // 영어 추임새를 허용하는 턴의 비율(0~1). 낮출수록 드물게 나온다
 export function buildPrompt(msgs) {
-  const objs = visible().map(o => `- ${o.id}: ${DESC[o.id]()}${G.seen.has(o.id) ? '' : ' (아직 가까이서 안 봄)'}`).join('\n');
+  const c = context();
   const chat = msgs.length ? msgs.map(m => `- (${m.kind === 'dona' ? '후원' : '채팅'}) ${m.text}`).join('\n') : '없음';
-  return `[목표] ${STAGE.goal}
-[현재 위치] ${G.at ? NAME[G.at] + ' 앞' : '방 한가운데'}
+  return `[목표] ${c.goal}
+[현재 위치] ${c.location}
 [보이는 오브젝트]
-${objs}
-[인벤토리] ${inv.map(i => i[1]).join(', ') || '비어 있음'}
-[직전 행동 결과] ${G.last}
+${c.objects}
+[인벤토리] ${c.inventory}
+[직전 행동 결과] ${c.last}
+[죽은 기록]
+${c.deaths}
 [최근 기록]
-${G.history.join('\n') || '없음'}
+${c.history}
 [방금 들어온 시청자 메시지]
 ${chat}
 [말투 지시] ${Math.random() < ENGLISH_RATE ? '이번 대사에는 영어 추임새를 하나 써도 된다(어울리지 않으면 안 써도 된다).' : '이번 대사는 영어 추임새 없이 한국어로만 말한다.'}`;
@@ -98,9 +104,10 @@ const REPLIES = [
   ['헬프 미... 뭘 해야 하는 거야...', 'sad'], ['음~ 이건가? 체크 잇 아웃!', 'normal'],
 ];
 export function mockBrain() {
-  const [line, emotion] = pick(REPLIES), o = pick(visible());
-  const action = inv.some(i => i[1] === '기름통') && Math.random() < 0.4
-    ? { type: 'use', target: 'lever', item: '기름통' }
-    : { type: pick(['move', 'interact', 'interact']), target: o.id, item: null };
+  const [line, emotion] = pick(REPLIES), objs = visibleObjects(), inv = state().inv;
+  const o = pick(objs);
+  const action = inv.length && Math.random() < 0.4
+    ? { type: 'use', target: pick(objs).id, item: pick(inv) }
+    : { type: pick(['move', 'interact', 'interact', 'pickup']), target: o?.id, item: null };
   return new Promise(ok => setTimeout(() => ok({ line, emotion, action, viewers: [] }), 700));
 }

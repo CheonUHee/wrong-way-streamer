@@ -159,25 +159,21 @@ fakeChat();
 
 /* ── 인벤토리 · 획득 알림 ── */
 const INV_SIZE = 9;                 // 칸 수 미정: 3열 기준으로 숫자만 바꾸면 된다
-export const ITEM = { oil: ['🛢️', '기름통'], coin: ['🪙', '낡은 동전'] };
-export const inv = [];
-export function renderInv(newIdx = -1) {
+// items: [{ icon, name }] — 스테이지 상태의 인벤토리를 그대로 그린다
+export function setInv(items, newIdx = -1) {
   $('inv').innerHTML = Array.from({ length: INV_SIZE }, (_, i) => {
-    const it = inv[i];
-    return `<div class="slot${it ? ' filled' : ''}${i === newIdx ? ' new' : ''}"><div class="box">${it ? it[0] : ''}</div><div class="name">${it ? esc(it[1]) : ''}</div></div>`;
+    const it = items[i];
+    return `<div class="slot${it ? ' filled' : ''}${i === newIdx ? ' new' : ''}"><div class="box">${it ? it.icon : ''}</div><div class="name">${it ? esc(it.name) : ''}</div></div>`;
   }).join('');
 }
 let toastTimer;
-export function gain(key) {
-  const it = ITEM[key];
-  if (inv.length >= INV_SIZE) return;
-  inv.push(it); renderInv(inv.length - 1);
+export function toast(html, ms = 3000) {
   clearTimeout(toastTimer);
-  $('toast').innerHTML = `${it[0]} <em>${esc(it[1])}</em> 획득!`;
+  $('toast').innerHTML = html;
   $('toast').classList.add('show');
-  toastTimer = setTimeout(() => $('toast').classList.remove('show'), 3000);
+  toastTimer = setTimeout(() => $('toast').classList.remove('show'), ms);
 }
-export function removeItem(name) { const i = inv.findIndex(it => it[1] === name); if (i >= 0) inv.splice(i, 1); renderInv(); }
+export const toastItem = it => toast(`${it.icon} <em>${esc(it.name)}</em> 획득!`);
 
 /* ── 방송 시간(= 스테이지 경과 시간) ── */
 const t0 = Date.now();

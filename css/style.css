@@ -61,6 +61,14 @@ button { font: inherit; color: inherit; cursor: pointer; }
   font-size: 5cqw; font-weight: 900; color: var(--accent); text-shadow: 0 .3cqw 1cqw #000;
 }
 .clear.show { display: grid; }
+.clear.dead { color: #ff6a6a; background: #2a000088; text-align: center; align-content: center; gap: 1cqw; }
+.clear.dead small { font-size: 1.6cqw; font-weight: 600; color: #ffd9d9; max-width: 70%; justify-self: center; }
+/* 구역 이동 때 화면 어둡게, 맞았을 때 붉게 번쩍 */
+.fade, .hit { position: absolute; inset: 0; pointer-events: none; opacity: 0; z-index: 4; transition: opacity .35s; }
+.fade { background: #000; }
+.fade.on { opacity: 1; }
+.hit { background: radial-gradient(circle, transparent 30%, #ff1a1a 100%); transition: opacity .15s; }
+.hit.on { opacity: .85; }
 @keyframes glint { to { box-shadow: 0 0 3.5cqw #fff3a8; } }
 .scene-label { position: absolute; left: 50%; top: 12%; transform: translateX(-50%); font-size: 1.2cqw; color: #ffffff55; }
 

@@ -1,6 +1,6 @@
 /* 진입점: 턴 진행(AI 호출 타이밍), 플레이어 입력, 프로토타입 컨트롤 */
 import { $, esc, pick, addLine, viewerLine, say, donate, setFace, drawBubble, NICKS } from './ui.js';
-import { G, resetStage, perform } from './stage.js';
+import { state, isBusy, perform, startFromUrl, restartStage } from './stage.js';
 import { EMOS, SYSTEM, aiOn, buildPrompt, callGemini, mockBrain, setOnConfigChange } from './ai.js';
 
 function applyTurn(out, msgs) {
@@ -9,10 +9,11 @@ function applyTurn(out, msgs) {
   const line = String(out.line || '...').slice(0, 80);
   say(line, emo);
   const result = perform({ type: String(a.type || 'idle'), target: a.target, item: a.item });
-  G.last = result;
-  msgs.forEach(m => G.history.push(`시청자(${m.kind === 'dona' ? '후원' : '채팅'}): ${m.text}`));
-  G.history.push(`나: ${line}`, `결과: ${result}`);
-  G.history = G.history.slice(-8);
+  const S = state();
+  S.last = result;
+  msgs.forEach(m => S.history.push(`시청자(${m.kind === 'dona' ? '후원' : '채팅'}): ${m.text}`));
+  S.history.push(`나: ${line}`, `결과: ${result}`);
+  S.history = S.history.slice(-8);
   (Array.isArray(out.viewers) ? out.viewers : []).slice(0, 2)
     .forEach((v, i) => setTimeout(() => viewerLine(String(v).slice(0, 40)), 700 + i * 900));
 }
@@ -21,30 +22,33 @@ function applyTurn(out, msgs) {
    비용 보호: 호출 간 최소 간격(MIN_GAP). 조용한 상태로 AUTO_LIMIT턴이 지나면 멈추지 않고
    IDLE_DELAY 간격으로 느려진다. 탭이 가려져 있으면 호출하지 않는다. */
 const MIN_GAP = 4000, AUTO_DELAY = 8000, AUTO_LIMIT = 6, IDLE_DELAY = 15000;
-let pending = [], inFlight = false, turnTimer, lastCall = 0, fails = 0;
+let pending = [], inFlight = false, turnTimer, lastCall = 0, fails = 0, autoTurns = 0;
+// 주소 뒤에 ?auto=off 를 붙이면 스트리머가 스스로 행동하지 않는다(채팅·후원이 올 때만 반응. 테스트용)
+const AUTO_OFF = new URLSearchParams(location.search).get('auto') === 'off';
 function schedule(delay) {
   clearTimeout(turnTimer);
-  if (G.cleared) return;
+  if (AUTO_OFF && !pending.length) return;
   turnTimer = setTimeout(turn, Math.max(delay, lastCall + MIN_GAP - Date.now()));
 }
 async function turn() {
-  if (inFlight || G.cleared) return;
-  if (document.hidden) return schedule(AUTO_DELAY);
+  if (inFlight) return;
+  // 걷기·사망·스테이지 전환 연출 중이거나 클리어 직후면 끝날 때까지 기다린다
+  if (document.hidden || isBusy() || state().cleared) return schedule(1500);
   const msgs = pending; pending = [];
-  if (msgs.length) { G.autoTurns = 0; setFace('think'); } else G.autoTurns++;
+  if (msgs.length) { autoTurns = 0; setFace('think'); } else autoTurns++;
   inFlight = true; lastCall = Date.now();
-  const stage = G;
+  const S = state();
   try {
     const out = aiOn() ? await callGemini(SYSTEM, buildPrompt(msgs)) : await mockBrain();
     fails = 0;
-    if (stage === G) applyTurn(out, msgs);            // 호출 도중 리셋됐으면 버린다
+    if (S === state() && !isBusy()) applyTurn(out, msgs);   // 호출 도중 리셋·연출이 시작됐으면 버린다
   } catch (e) {
     fails++; setFace('normal');
     addLine('⚠ AI 응답 실패: ' + esc(String(e.message || e).slice(0, 140)), 'sys');
   }
   inFlight = false;
   if (fails >= 3) return addLine('연속 실패로 자동 진행을 멈췄습니다. 설정을 확인해 주세요.', 'sys');
-  schedule(pending.length ? 800 : G.autoTurns >= AUTO_LIMIT ? IDLE_DELAY : AUTO_DELAY);
+  schedule(pending.length ? 800 : autoTurns >= AUTO_LIMIT ? IDLE_DELAY : AUTO_DELAY);
 }
 
 /* ── 플레이어 입력 ── */
@@ -85,11 +89,11 @@ $('otherDona').onclick = () => {                    // 다른 시청자의 후�
   donate(pick(NICKS)[0], pick([1000, 5000, 10000]), msg);
   pending.push({ kind: 'dona', text: msg }); schedule(1500);
 };
-$('resetBtn').onclick = () => { pending = []; resetStage(); schedule(2000); };
+$('resetBtn').onclick = () => { pending = []; restartStage(); schedule(2000); };
 $('guideBtn').onclick = e => { document.body.classList.toggle('guide'); e.target.classList.toggle('on'); drawBubble(); };
 
 
 setOnConfigChange(() => { fails = 0; schedule(500); });
-resetStage();
+startFromUrl();
 setTimeout(() => say('하이 하이~! 오늘은 진짜 한 번에 깬다, 레츠 고!', 'happy'), 600);
 schedule(AUTO_DELAY);
