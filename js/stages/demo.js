@@ -134,6 +134,16 @@ export default {
     skel: { model: { pack: 'skeleton', name: 'Skeleton_Minion' }, spawn: [1.4, -4.2] },
   },
 
+  // 다른 시청자: 방해꾼은 후원으로 오른쪽(함정)을 밀고, 죽은 뒤에도 한 번 더 부추긴다. 조력자는 표지판을 가리킨다
+  viewers: {
+    troll: 1, helper: 1,
+    script: [
+      { role: 'troll', when: ['area:gate', '!keyTaken'], delay: 8, text: '오른쪽 길 금화 보임? 개꿀 ㅋㅋ', dona: 5000 },
+      { role: 'helper', when: 'area:gate', delay: 16, text: '가운데 표지판 그림 잘 봐봐' },
+      { role: 'troll', when: ['dead:1', 'area:gate'], delay: 4, text: '아까 운 나빴던 거임 한 번 더 ㄱㄱ', dona: 3000 },
+    ],
+  },
+
   rules: [
     { target: 'key', on: ['pickup', 'interact'], do: ['set:keyTaken', 'give:key'], say: '은빛 열쇠를 주웠다' },
     { target: 'gate', on: 'use', item: '은빛 열쇠', if: '!gateOpen', do: ['set:gateOpen', 'take:은빛 열쇠'], say: '열쇠를 꽂고 돌리자 철문 자물쇠가 철컥 풀렸다' },
@@ -150,7 +160,8 @@ export default {
     { type: 'interact', target: 'gate' },
   ],
   tests: [
-    { name: '오른쪽 길 금화에 다가가면 죽는다', actions: [{ type: 'interact', target: 'rightArch' }, { type: 'move', target: 'coins' }], expect: { dead: true } },
+    { name: '금화는 먼저 다가가기만 한다(말릴 수 있는 한 박자)', actions: [{ type: 'interact', target: 'rightArch' }, { type: 'interact', target: 'coins' }], expect: { dead: false, area: 'dark' } },
+    { name: '금화 앞에서 손을 뻗으면 죽는다', actions: [{ type: 'interact', target: 'rightArch' }, { type: 'move', target: 'coins' }, { type: 'interact', target: 'coins' }], expect: { dead: true } },
     { name: '열쇠 없이는 철문이 안 열린다', actions: [{ type: 'interact', target: 'gate' }], expect: { cleared: false, flag: ['!gateOpen'] } },
   ],
 };

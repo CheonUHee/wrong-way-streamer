@@ -41,14 +41,11 @@ export function setFace(emo) {
 }
 setFace('normal');
 
-/* ── 말풍선 형태 생성 ── */
-const STYLE = {
-  normal: { fill: '#ffffff', stroke: '#14161c' },
-  happy:  { fill: '#fff8d6', stroke: '#e0a800' },
-  shout:  { fill: '#ffffff', stroke: '#14161c' },
-  angry:  { fill: '#fff0ee', stroke: '#e02b2b' },
-  sad:    { fill: '#e9eefb', stroke: '#7d8fb8' },
-};
+/* ── 말풍선 형태 생성 ──
+   모양은 두 가지만 쓴다: 일반(둥근 말풍선) / 놀람(뾰족한 폭발형, 소리치거나 화낼 때).
+   나머지 감정(기쁨·슬픔 등)은 스트리머 표정이 맡는다.
+   떠 있는 느낌: 위가 밝고 아래가 살짝 어두운 면 + 넓고 부드러운 그림자(CSS) + 천천히 둥실거림(CSS) */
+const shapeOf = emo => (emo === 'shout' || emo === 'angry') ? 'burst' : 'calm';
 // 둥근 사각형 둘레 위의 점과 바깥 방향 법선
 function perimeter(w, h, r) {
   const a = Math.PI * r / 2, segs = [w - 2*r, a, h - 2*r, a, w - 2*r, a, h - 2*r, a];
@@ -70,46 +67,48 @@ function perimeter(w, h, r) {
   };
   return { total, at };
 }
-function bodyPath(emo, w, h, u) {
+function bodyPath(shape, w, h, u) {
   const f = n => n.toFixed(1);
-  if (emo === 'normal' || emo === 'happy') {
-    const r = emo === 'happy' ? h / 2 : Math.min(h / 2, 2.2 * u);
+  if (shape === 'calm') {
+    const r = Math.min(h / 2, 2.6 * u);
     return `M${r},0 H${w-r} A${r},${r} 0 0 1 ${w},${r} V${h-r} A${r},${r} 0 0 1 ${w-r},${h} H${r} A${r},${r} 0 0 1 0,${h-r} V${r} A${r},${r} 0 0 1 ${r},0Z`;
   }
   const P = perimeter(w, h, Math.min(h / 2, 2.5 * u));
-  const step = (emo === 'sad' ? 2.6 : 2.2) * u;
-  let n = Math.max(8, Math.round(P.total / step)); if (n % 2) n++;
+  let n = Math.max(10, Math.round(P.total / (2.4 * u))); if (n % 2) n++;
   let seed = 7; const rnd = () => (seed = (seed * 16807) % 2147483647) / 2147483647;
   const pts = [];
   for (let i = 0; i < n; i++) {
     const p = P.at(P.total * i / n);
-    let off = 0;
-    if (emo === 'shout' || emo === 'angry') off = i % 2 ? (0.9 + rnd() * 1.1) * u * (emo === 'angry' ? 1.2 : 1) : -0.3 * u;
-    if (emo === 'sad') off = (i % 2 ? 0.45 : -0.45) * u;
+    const off = i % 2 ? (0.9 + rnd() * 1.0) * u : -0.25 * u;
     pts.push({ x: p.x + p.nx * off, y: p.y + p.ny * off });
   }
-  if (emo === 'shout' || emo === 'angry') return 'M' + pts.map(p => `${f(p.x)},${f(p.y)}`).join(' L') + 'Z';
-  const mid = (a, b) => ({ x: (a.x + b.x) / 2, y: (a.y + b.y) / 2 });   // sad: 물결
-  let d = `M${f(mid(pts[n-1], pts[0]).x)},${f(mid(pts[n-1], pts[0]).y)}`;
-  for (let i = 0; i < n; i++) { const m = mid(pts[i], pts[(i+1) % n]); d += ` Q${f(pts[i].x)},${f(pts[i].y)} ${f(m.x)},${f(m.y)}`; }
-  return d + 'Z';
+  return 'M' + pts.map(p => `${f(p.x)},${f(p.y)}`).join(' L') + 'Z';
 }
 export function drawBubble() {
-  const emo = bubble.dataset.emo, st = STYLE[emo];
+  const emo = bubble.dataset.emo, shape = shapeOf(emo);
+  bubble.dataset.shape = shape;
   const w = bubble.offsetWidth, h = bubble.offsetHeight;
   if (!w || !h) return;
-  const u = stage.clientWidth / 100, sw = Math.max(2, 0.28 * u);
-  // 꼬리 목표점: 스트리머 입 근처(말풍선 기준 좌표)
+  const u = stage.clientWidth / 100;
+  // 꼬리 목표점: 스트리머 입 근처(말풍선 기준 좌표). 꼬리는 몸통 오른쪽에서 부드럽게 휘어 나간다
   const tx = streamer.offsetLeft + streamer.offsetWidth * MOUTH.x - bubble.offsetLeft;
   const ty = streamer.offsetTop + streamer.offsetHeight * MOUTH.y - bubble.offsetTop;
-  const bx = w - 1.2 * u, by = Math.min(h - 1.5 * u, Math.max(1.5 * u, h / 2));
-  const dx = tx - bx, dy = ty - by, len = Math.hypot(dx, dy) || 1, px = -dy / len, py = dx / len, hw = 1.3 * u;
-  const body = bodyPath(emo, w, h, u);
-  const t = `M${bx + px*hw},${by + py*hw} L${tx},${ty} L${bx - px*hw},${by - py*hw}Z`;
+  const bx = w - 2 * u, by = Math.min(h - 1.6 * u, Math.max(1.6 * u, h * 0.6));
+  const dx = tx - bx, dy = ty - by, len = Math.hypot(dx, dy) || 1, px = -dy / len, py = dx / len, hw = 1.6 * u;
+  const mx = (bx + tx) / 2, my = (by + ty) / 2 - 0.8 * u;
+  const t = shape === 'calm'
+    ? `M${bx + px*hw},${by + py*hw} Q${mx},${my} ${tx},${ty} Q${mx - px*hw*0.3},${my - py*hw*0.3} ${bx - px*hw},${by - py*hw}Z`
+    : `M${bx + px*hw},${by + py*hw} L${tx},${ty} L${bx - px*hw},${by - py*hw}Z`;
+  const body = bodyPath(shape, w, h, u);
+  const edge = shape === 'calm' ? '#14161c14' : '#ff5b5b';
+  const sw = shape === 'calm' ? Math.max(1, 0.12 * u) : Math.max(2, 0.25 * u);
   bubbleSvg.innerHTML =
-    `<path d="${t}" fill="${st.fill}" stroke="${st.stroke}" stroke-width="${sw * 2}" stroke-linejoin="round"/>` +
-    `<path d="${body}" fill="${st.fill}" stroke="${st.stroke}" stroke-width="${sw}" stroke-linejoin="round"/>` +
-    `<path d="${t}" fill="${st.fill}"/>`;
+    `<defs><linearGradient id="bubFill" gradientUnits="userSpaceOnUse" x1="0" y1="0" x2="0" y2="${h}"><stop offset="0" stop-color="#ffffff"/><stop offset="1" stop-color="${shape === 'calm' ? '#eef1f7' : '#fff1ec'}"/></linearGradient></defs>` +
+    `<path d="${t}" fill="url(#bubFill)" stroke="${edge}" stroke-width="${sw}" stroke-linejoin="round"/>` +
+    `<path d="${body}" fill="url(#bubFill)" stroke="${edge}" stroke-width="${sw}" stroke-linejoin="round"/>` +
+    `<path d="${t}" fill="url(#bubFill)"/>` +
+    // 위쪽 안쪽 하이라이트(빛이 위에서 비치는 느낌)
+    (shape === 'calm' ? `<path d="M${2.6*u},${0.35*u} H${w-2.6*u}" stroke="#ffffff" stroke-width="${0.25*u}" stroke-linecap="round" opacity=".9"/>` : '');
 }
 new ResizeObserver(drawBubble).observe(stage);
 new ResizeObserver(drawBubble).observe(bubble);
@@ -143,13 +142,25 @@ export function donate(nick, amount, msg, mine) {
 /* ── 채팅 ── */
 const log = $('log');
 export const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const chatTimes = [];
 export function addLine(html, cls = '') {
   const stick = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
   const p = document.createElement('p'); p.className = cls; p.innerHTML = html; log.appendChild(p);
   while (log.children.length > 120) log.firstChild.remove();
   if (stick) log.scrollTop = log.scrollHeight;
+  if (cls === '' || cls === 'dona-line') { chatTimes.push(Date.now()); if (chatTimes.length > 50) chatTimes.shift(); }
+  return p;
 }
-export const NICKS = [['감자튀김', '#ff9e6b'], ['퍼즐장인', '#9be36b'], ['새벽반', '#c59bff'], ['훈수빌런', '#ff7ab8'], ['ㅇㅇ', '#7fd6c8'], ['고양이집사', '#ffd36b']];
+// 최근 ms 동안 다른 시청자가 올린 줄 수: 채팅창이 붐빌수록 스트리머가 내 채팅을 놓친다
+export const chatNoise = (ms = 8000) => chatTimes.filter(t => Date.now() - t < ms).length;
+// 내 채팅 옆에 스트리머가 읽었는지 표시
+export function markRead(el, read) {
+  if (!el?.isConnected) return;
+  const tag = document.createElement('span');
+  tag.className = 'readtag' + (read ? '' : ' missed'); tag.textContent = read ? '👀 읽음' : '💨 놓침';
+  el.appendChild(tag);
+}
+export const NICKS = [['감자튀김', '#ff9e6b'], ['눈팅러', '#9bd0ff'], ['새벽반', '#c59bff'], ['치킨먹고싶다', '#ffb86b'], ['ㅇㅇ', '#7fd6c8'], ['고양이집사', '#ffd36b']];
 const CHATS = ['ㅋㅋㅋㅋㅋ', '아니 거기 아닌데요...', '이게 방송이지', '오늘 안에 깨긴 하냐', '귀여우니까 봐준다', '또 딴 데 본다 ㅋㅋ', '집중 집중!!', 'ㄹㅇㅋㅋ', '답답해서 내가 한다'];
 export const pick = a => a[Math.floor(Math.random() * a.length)];
 export function viewerLine(text) { const [n, c] = pick(NICKS); addLine(`<span class="nick" style="color:${c}">${n}</span>${esc(text)}`); }
@@ -165,6 +176,7 @@ export function setInv(items, newIdx = -1) {
     const it = items[i];
     return `<div class="slot${it ? ' filled' : ''}${i === newIdx ? ' new' : ''}"><div class="box">${it ? it.icon : ''}</div><div class="name">${it ? esc(it.name) : ''}</div></div>`;
   }).join('');
+  $('invCount').textContent = `${Math.min(items.length, INV_SIZE)}/${INV_SIZE}`;
 }
 let toastTimer;
 export function toast(html, ms = 3000) {

@@ -4,13 +4,13 @@
    상태(state)는 스테이지 데이터와 분리된 평범한 객체라 복제·비교가 쉽다.
    perform()은 규칙을 즉시 판정하고, 화면이 재생할 effects 목록을 돌려준다. */
 
-export const ACTION_TYPES = ['move', 'interact', 'pickup', 'use', 'idle'];
+export const ACTION_TYPES = ['move', 'interact', 'pickup', 'use', 'explore', 'idle'];
 
 /* ── 상태 ── */
 export function createState(stage) {
   const s = {
     stageId: stage.id, area: stage.start.area, entry: stage.start.entry,
-    flags: { ...(stage.flags || {}) }, inv: [], at: null, seen: [],
+    flags: { ...(stage.flags || {}) }, inv: [], at: null, near: null, noticed: null, seen: [],
     cleared: false, dead: false, deaths: [], checkpoint: null,
     last: '방송을 막 시작했다', history: [],
   };
@@ -22,19 +22,23 @@ function saveCheckpoint(s) { s.checkpoint = { area: s.area, entry: s.entry, flag
 // 죽은 뒤 체크포인트(마지막으로 들어온 안전한 구역의 입구)로 되돌린다. 죽은 기억(deaths, history)은 남긴다.
 export function respawn(stage, s) {
   const c = s.checkpoint;
-  Object.assign(s, { area: c.area, entry: c.entry, flags: { ...c.flags }, inv: [...c.inv], at: null, dead: false });
-  s.last = `쓰러졌다가 ${areaName(stage, s.area)} 입구에서 다시 일어났다`;
+  Object.assign(s, { area: c.area, entry: c.entry, flags: { ...c.flags }, inv: [...c.inv], at: null, near: null, noticed: null, dead: false });
+  s.last = `쓰러졌다가 ${areaName(stage, s.area)}에서 다시 일어났다`;
 }
 
 /* ── 조건 ──
    'flag' / '!flag'          : 플래그가 켜져 있다 / 꺼져 있다
    'has:아이템' / '!has:아이템' : 인벤토리에 있다 / 없다
-   'at:오브젝트id'             : 지금 그 오브젝트 앞에 있다 */
+   'at:오브젝트id'             : 지금 그 오브젝트 앞에 있다
+   'area:구역id'               : 지금 그 구역에 있다
+   'dead:N'                   : N번 이상 죽었다 */
 export function cond(s, c) {
   const neg = c.startsWith('!'), k = neg ? c.slice(1) : c;
   let v;
   if (k.startsWith('has:')) v = s.inv.includes(k.slice(4));
   else if (k.startsWith('at:')) v = s.at === k.slice(3);
+  else if (k.startsWith('area:')) v = s.area === k.slice(5);
+  else if (k.startsWith('dead:')) v = s.deaths.length >= Number(k.slice(5));
   else v = !!s.flags[k];
   return neg ? !v : v;
 }
@@ -54,7 +58,7 @@ const josa = (word, a, b) => { const c = word.charCodeAt(word.length - 1) - 0xac
 
 /* ── 행동 처리 ──
    규칙(rule) 형식: { target, on, item, if, do, say }
-   on  : 'interact'(기본) | 'move' | 'pickup' | 'use' | 'any' 또는 배열
+   on  : 'interact'(기본. 클리어·구역 이동 규칙은 move도) | 'move' | 'pickup' | 'use' | 'any' 또는 배열
    do  : 'set:플래그' 'unset:플래그' 'give:아이템키' 'take:아이템이름' 'goto:구역[@입구]'
          'enemy:적id' 'die:사유' 'clear'
    오브젝트에 exit: '구역[@입구]' 이 있으면 그 오브젝트로 가거나 만지면 구역을 옮기는 규칙이 자동으로 붙는다. */
@@ -68,22 +72,37 @@ function rulesOf(stage) {
   }
   return stage._rules;
 }
+// on을 생략한 규칙: 클리어나 구역 이동을 일으키면 "그쪽으로 가기"(move)에도 반응한다.
+// 열린 문에 "나가"라고 하면 AI는 대개 move를 고르기 때문이다.
+const defaultOn = r => [].concat(r.do || []).some(d => d === 'clear' || d.startsWith('goto:')) ? ['interact', 'move'] : 'interact';
 function matches(r, a, o, s) {
   if ([].concat(r.target).indexOf(o.id) < 0) return false;
-  const on = [].concat(r.on || 'interact');
+  const on = [].concat(r.on || defaultOn(r));
   if (!on.includes('any') && !on.includes(a.type)) return false;
   if (r.item && a.item !== r.item) return false;
   return all(s, r.if);
 }
 
+// 함정: 규칙에 die·enemy가 있는 오브젝트(또는 approach: true). approach: false로 끌 수 있다.
+export const isTrap = (stage, o) => o.approach ?? rulesOf(stage).some(r => [].concat(r.target).includes(o.id) && [].concat(r.do || []).some(d => /^(die|enemy)(:|$)/.test(d)));
+
 export function perform(stage, s, a) {
   const effects = [];
   if (s.cleared || s.dead) return { result: '지금은 움직일 수 없다', effects };
+  // explore: 정한 대상 없이 구역 안을 돌아다니며 둘러본다(화면에서 배회 지점으로 걷는다)
+  if (a.type === 'explore') { s.at = null; s.near = '구역 안을 돌아다니며 둘러보는 중'; return { result: '주변을 두리번거리며 돌아다녔다', effects: [{ type: 'explore' }] }; }
   const o = objectsIn(stage, s).find(v => v.id === a.target);
   if (a.type === 'idle' || !o) return { result: '제자리에 서 있다', effects };
 
+  // 위험 앞 한 박자: 함정은 멀리서 바로 건드리지 못하고 먼저 다가가기만 한다.
+  // 플레이어가 "멈춰!"라고 말릴 수 있는 턴을 하나 보장하기 위해서다.
+  const approach = isTrap(stage, o) && s.at !== o.id;
   effects.push({ type: 'moveTo', obj: o.id });
-  s.at = o.id; if (!s.seen.includes(o.id)) s.seen.push(o.id);
+  s.at = o.id; s.near = null; if (!s.seen.includes(o.id)) s.seen.push(o.id);
+  if (approach) {
+    const n = o.name;
+    return { result: a.type === 'move' ? `${n} 바로 앞까지 다가갔다` : `${n} 바로 앞까지 다가갔다. 이제 손만 뻗으면 된다`, effects };
+  }
 
   if (a.type === 'use' && (!a.item || !s.inv.includes(a.item))) return { result: '그런 아이템은 갖고 있지 않다', effects };
 
@@ -107,7 +126,7 @@ export function perform(stage, s, a) {
     else if (cmd === 'take') { const i = s.inv.indexOf(arg); if (i >= 0) s.inv.splice(i, 1); effects.push({ type: 'lose', item: arg }); }
     else if (cmd === 'goto') {
       const [area, entry = 'start'] = arg.split('@');
-      s.area = area; s.entry = entry; s.at = null;
+      s.area = area; s.entry = entry; s.at = null; s.near = null; s.noticed = null;
       if (stage.areas[area]?.checkpoint !== false) saveCheckpoint(s);   // 위험 구역은 체크포인트로 삼지 않는다
       effects.push({ type: 'goto', area, entry });
     }
@@ -122,13 +141,15 @@ export function perform(stage, s, a) {
 /* ── AI에게 줄 상황 정보 ── */
 export function promptContext(stage, s) {
   const objs = objectsIn(stage, s).map(o => `- ${o.id}: ${describe(s, o)}${s.seen.includes(o.id) ? '' : ' (아직 가까이서 안 봄)'}`);
-  const at = s.at ? objectById(stage, s.at)?.name + ' 앞' : '입구 근처';
+  const at = s.at ? objectById(stage, s.at)?.name + ' 앞' : (s.near || '입구 근처');
+  const n = s.noticed && objectsIn(stage, s).find(o => o.id === s.noticed);
   return {
     goal: stage.goal,
     location: `${areaName(stage, s.area)} · ${at}`,
     objects: objs.join('\n'),
     inventory: s.inv.join(', ') || '비어 있음',
     last: s.last,
+    noticed: n ? `${n.id}: ${describe(s, n)}` : '',
     history: s.history.join('\n') || '없음',
     deaths: s.deaths.length
       ? s.deaths.map((d, i) => `- ${i + 1}번째: ${areaName(stage, d.area)}의 ${d.obj} 쪽에서 ${d.reason}`).join('\n')

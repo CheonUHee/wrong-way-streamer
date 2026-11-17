@@ -233,6 +233,18 @@ const arms = { r: makeArm(1), l: makeArm(-1) };
 let walk = null, anim = null, glance = null, idleSince = 0, nextGlance = 4;
 let focus = new THREE.Vector3(), objectsNow = [];
 let foe = null, falling = null, shake = 0;
+/* 자율 행동(API 호출 없음): AI 턴 사이의 빈 시간에 구역 안을 돌아다니고(배회),
+   지나가다 반짝이거나 움직이는 물건이 가까우면 고개를 돌린다(시선 뺏기). */
+let spots = [], autonomy = true, wanderAt = 0, lastNoticeCheck = 0;
+const noticedAt = {};
+const hooks = { notice: () => {}, wander: () => {} };
+export const onNotice = fn => { hooks.notice = fn; };   // 시선을 뺏긴 오브젝트 id를 알려 준다
+export const onWander = fn => { hooks.wander = fn; };   // 오브젝트 앞을 떠나 돌아다니기 시작했다
+export const setAutonomy = on => { autonomy = on; };
+const WANDER_DELAY = [7, 12];                          // 가만히 있은 지 이만큼(초) 지나면 돌아다닌다
+const NOTICE_RANGE = 3.2, NOTICE_COOLDOWN = 25;         // 이 거리 안의 눈길 끄는 물건에 고개를 돌린다. 같은 물건은 한동안 다시 안 본다
+const nextWander = t => t + WANDER_DELAY[0] + Math.random() * (WANDER_DELAY[1] - WANDER_DELAY[0]);
+const catchy = o => !!(o.fx && (o.fx.glow || o.fx.sparkle || o.fx.anim));
 const mixers = [];
 const lookQ = new THREE.Quaternion(), tmp = new THREE.PerspectiveCamera();   // 카메라 기준 lookAt(-z가 정면)
 function finishWalk() { if (walk) { const d = walk.done; walk = null; d(); } }
@@ -254,6 +266,32 @@ export function loadArea(stage, s, areaId, entryId) {
   tmp.position.copy(camera.position); tmp.lookAt(focus); camera.quaternion.copy(tmp.quaternion);
   arms.r.visible = arms.l.visible = true;
   render(stage, s); resize();
+  spots = wanderSpots(area, stage.objects.filter(o => o.area === areaId));
+  wanderAt = nextWander(clock.elapsedTime); autonomy = true;
+}
+
+// 배회 지점: 배경 소품 앞(소품을 구경)과 구역의 네 귀퉁이 쪽(벽·울타리를 구경). 물건과 겹치는 곳은 뺀다.
+function wanderSpots(area, objs) {
+  const hw = area.env.w / 2 - 1, hd = area.env.d / 2 - 1, out = [];
+  const clampXZ = (x, z) => [THREE.MathUtils.clamp(x, -hw, hw), THREE.MathUtils.clamp(z, -hd, hd)];
+  for (const [, , pos] of area.decor || []) {
+    const [x, , z] = pos, len = Math.hypot(x, z) || 1;
+    out.push({ pos: clampXZ(x - x / len * 1.4, z - z / len * 1.4), look: [x, Math.min(pos[1] + 0.7, 1.6), z] });
+  }
+  for (const [sx, sz] of [[-1, -1], [1, -1], [-1, 1], [1, 1]])
+    out.push({ pos: [sx * hw * 0.55, sz * hd * 0.55], look: [sx * (hw + 1), 1.3, sz * (hd + 1) * 0.4] });
+  return out.filter(p => objs.every(o => o.solid === false || Math.hypot(o.pos[0] - p.pos[0], o.pos[2] - p.pos[1]) > 1.1));
+}
+// 배회 한 걸음: 지금 자리에서 너무 가깝지 않은 지점 하나로 걸어가 둘러본다
+export function explore() {
+  if (!spots.length) return Promise.resolve();
+  const here = camera.position;
+  const far = spots.filter(p => Math.hypot(p.pos[0] - here.x, p.pos[1] - here.z) > 2);
+  const p = (far.length ? far : spots)[Math.floor(Math.random() * (far.length || spots.length))];
+  finishWalk(); glance = null;
+  focus.set(...p.look);
+  hooks.wander();
+  return new Promise(done => { walk = { path: planPath(here.clone(), v3(p.pos[0], EYE, p.pos[1]), null), wait: 0.2, done }; });
 }
 
 export function render(stage, s) {
@@ -292,7 +330,7 @@ export function moveTo(o) {
   finishWalk(); glance = null;
   focus.set(...o.look);
   return new Promise(done => {
-    walk = { path: planPath(camera.position.clone(), v3(o.stand[0], EYE, o.stand[1]), o.id), wait: 0.35, done };
+    walk = { path: planPath(camera.position.clone(), v3(o.stand[0], EYE, o.stand[1]), o.id), wait: 0.35, done, target: o.id };
   });
 }
 // 손 동작: interact/use = 앞으로 뻗기, pickup = 아래로 뻗어 집기
@@ -381,6 +419,18 @@ function step(maxDt) {
     nextGlance = 4 + Math.random() * 4; idleSince = t;
   }
   if (glance && t > glance.until) glance = null;
+
+  // 자율 배회: AI가 시킨 일 없이 한동안 서 있으면 구역 안을 돌아다닌다
+  const free = autonomy && !walk && !anim && !foe && !falling;
+  if (!free) wanderAt = Math.max(wanderAt, nextWander(t));   // 시킨 일을 마친 뒤에도 한동안은 그 자리에 머문다
+  else if (t > wanderAt) { explore(); wanderAt = nextWander(t); }
+  // 시선 뺏기: 가까이 있는 눈길 끄는 물건(빛·반짝임·움직임)에 고개를 홱 돌린다. 걷는 중에도 일어난다
+  if (autonomy && !foe && !falling && !anim && t - lastNoticeCheck > 0.4) {
+    lastNoticeCheck = t;
+    const near = objectsNow.find(o => catchy(o) && o.id !== walk?.target && (t - (noticedAt[o.id] ?? -99)) > NOTICE_COOLDOWN
+      && Math.hypot(o.pos[0] - camera.position.x, o.pos[2] - camera.position.z) < NOTICE_RANGE);
+    if (near) { noticedAt[near.id] = t; glance = { at: v3(...near.look), until: t + 1.6 }; hooks.notice(near.id); }
+  }
 
   // 시선
   const target = foe ? v3(foe.root.position.x, 1.2, foe.root.position.z) : glance ? glance.at : focus;

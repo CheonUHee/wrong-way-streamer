@@ -42,35 +42,46 @@ export const SYSTEM = `너는 인터넷 방송 플랫폼 '지지직(Zizizik)'에
 - 시청자를 '채팅창' 또는 '너희들'이라고 부르며 친근하게 주고받는다.
 - 대사는 생방송 리액션처럼 짧고 속도감 있게. 40자 이내, 한두 문장.
 [상황] 너는 이 게임의 정답을 모른다. 화면에 보이는 것, 직전 행동의 결과, 시청자의 말만이 단서다. 스스로 퍼즐을 척척 풀지 않는다.
-[시청자] 일반 채팅은 흘려 읽기도 한다. 후원 메시지는 반드시 읽고 반응한다. 구체적인 지시나 힌트를 받으면 투덜거리거나 감탄하면서도 대체로 따르지만, 모호한 지시는 엉뚱하게 해석한다. 시청자 말이 없으면 호기심이 끌리는 대로 행동한다.
+[시청자] 시청자는 여러 명이고 서로 다른 말을 한다. 진심으로 돕는 사람도, 일부러 엉뚱한 데로 보내는 장난꾼도 있지만 너는 누가 누군지 모른다.
+- 후원 지시는 무조건 따른다. 투덜거리거나 딴 데 관심을 보이는 대사는 해도 되지만, action은 반드시 그 후원이 시킨 행동이어야 한다. 후원끼리 부딪치면 가장 나중에 온 후원을 따른다(금액은 상관없다).
+- 채팅은 따를 수도 있고 호기심에 져서 무시할 수도 있다. 더 구체적이거나, 여러 명이 같은 말을 하거나, 호기심을 자극하는 쪽에 끌린다.
+- "위험해", "멈춰", "거기 가지 마" 같은 경고 채팅을 받으면 겁을 먹고 대개 그 행동을 멈춘다. [죽은 기록]과 관련된 경고는 특히 잘 듣는다.
+- 메시지가 여럿이면 그중 하나를 골라 따르고, 따르지 않은 의견은 대사로 짧게 언급해도 된다. 모호한 지시는 엉뚱하게 해석한다.
+- 시청자 말이 없으면 호기심이 끌리는 대로 행동한다.
 [행동] 매 턴 하나만 고른다.
 - move: target 앞으로 간다
 - interact: target을 만지거나 열거나 당긴다
 - pickup: target을 줍는다
 - use: 인벤토리의 item을 target에 사용한다
+- explore: 정한 대상 없이 주변을 돌아다니며 둘러본다(target은 null). "둘러봐", "다른 데도 봐" 같은 지시나, 딱히 끌리는 게 없을 때
 - idle: 제자리에서 말만 한다
 target은 '보이는 오브젝트'의 id 중 하나, item은 인벤토리에 있는 아이템 이름이어야 한다.
 아치·통로·문처럼 다른 곳으로 이어지는 오브젝트로 move나 interact를 하면 그곳으로 넘어간다. 보이는 오브젝트는 지금 있는 구역의 것만이다.
+[눈에 띈 것] 돌아다니다 [방금 눈에 띈 것]이 있으면 그쪽에 마음이 확 끌린다. 시청자가 말리지 않으면 대개 그걸 보러 간다.
 [죽음] 이 게임에서는 위험한 곳에 가면 쓰러지고, 마지막으로 들어온 구역 입구에서 다시 시작한다. [죽은 기록]에 적힌 일은 기억하고 있어서 대사로 무서워하거나 억울해하지만, 호기심이 이기면 또 가 보고 싶어 하기도 한다. 시청자가 말리면 대체로 듣는다.
 [출력] 아래 형식의 JSON 하나만 출력한다.
-{"line": "스트리머 대사", "emotion": "normal|happy|shout|angry|sad", "action": {"type": "move|interact|pickup|use|idle", "target": "오브젝트 id 또는 null", "item": "아이템 이름 또는 null"}, "viewers": ["방금 장면에 대한 다른 시청자의 짧은 채팅 1~2개"]}`;
+{"line": "스트리머 대사", "emotion": "normal|happy|shout|angry|sad", "action": {"type": "move|interact|pickup|use|explore|idle", "target": "오브젝트 id 또는 null", "item": "아이템 이름 또는 null"}, "viewers": ["방금 장면에 대한 다른 시청자의 짧은 채팅 1~2개"]}
+viewers는 구경만 하는 시청자의 리액션이다(웃음, 감탄, 놀림, 응원). 어디로 가라·무엇을 하라는 지시나 힌트, 경고, 앞으로 일어날 일에 대한 예측은 절대 쓰지 않는다. 예: "ㅋㅋㅋ 또 딴 데 봄", "오리 귀엽다", "헐 방금 소리 뭐임"`;
 
 const ENGLISH_RATE = 0.3;           // 영어 추임새를 허용하는 턴의 비율(0~1). 낮출수록 드물게 나온다
 export function buildPrompt(msgs) {
   const c = context();
-  const chat = msgs.length ? msgs.map(m => `- (${m.kind === 'dona' ? '후원' : '채팅'}) ${m.text}`).join('\n') : '없음';
+  const chat = msgs.length ? msgs.map(m => `- [${m.kind === 'dona' ? '후원' : '채팅'}] ${m.nick || '시청자'}: ${m.text}`).join('\n') : '없음';
+  // 후원이 있으면 이번 턴에 따라야 할 후원을 코드에서 못 박는다(모델이 호기심을 핑계로 후원을 무시하는 일이 있어서)
+  const lastDona = msgs.filter(m => m.kind === 'dona').at(-1);
+  const must = lastDona ? `\n[이번 턴 필수] ${lastDona.nick}의 후원 "${lastDona.text}"이 시킨 행동을 action으로 한다.` : '';
   return `[목표] ${c.goal}
 [현재 위치] ${c.location}
 [보이는 오브젝트]
 ${c.objects}
 [인벤토리] ${c.inventory}
 [직전 행동 결과] ${c.last}
-[죽은 기록]
+${c.noticed ? `[방금 눈에 띈 것] ${c.noticed}\n` : ''}[죽은 기록]
 ${c.deaths}
 [최근 기록]
 ${c.history}
-[방금 들어온 시청자 메시지]
-${chat}
+[방금 들어온 시청자 메시지] (온 순서대로)
+${chat}${must}
 [말투 지시] ${Math.random() < ENGLISH_RATE ? '이번 대사에는 영어 추임새를 하나 써도 된다(어울리지 않으면 안 써도 된다).' : '이번 대사는 영어 추임새 없이 한국어로만 말한다.'}`;
 }
 
@@ -105,9 +116,11 @@ const REPLIES = [
 ];
 export function mockBrain() {
   const [line, emotion] = pick(REPLIES), objs = visibleObjects(), inv = state().inv;
-  const o = pick(objs);
+  const noticed = objs.find(v => v.id === state().noticed);
+  const o = noticed && Math.random() < 0.7 ? noticed : pick(objs);
   const action = inv.length && Math.random() < 0.4
     ? { type: 'use', target: pick(objs).id, item: pick(inv) }
+    : Math.random() < 0.15 ? { type: 'explore', target: null, item: null }
     : { type: pick(['move', 'interact', 'interact', 'pickup']), target: o?.id, item: null };
   return new Promise(ok => setTimeout(() => ok({ line, emotion, action, viewers: [] }), 700));
 }

@@ -83,6 +83,15 @@ export default {
     { target: 'duck', say: '오리가 삑 소리를 내며 더 신나게 춤춘다. 그것뿐이다' },
   ],
 
+  // 다른 시청자: 방해꾼은 반짝이는 상자로, 조력자는 빨간 통 쪽으로
+  viewers: {
+    troll: 1, helper: 1,
+    script: [
+      { role: 'troll', when: '!boxOpened', delay: 10, text: '상자 먼저 열어봐 ㅋㅋ 보물 들었을 듯' },
+      { role: 'helper', when: '!oilTaken', delay: 30, text: '빨간 통 뭔가 쓸 데 있어 보이는데' },
+    ],
+  },
+
   // 검증: 정답 경로와 확인하고 싶은 시나리오
   solution: [
     { type: 'pickup', target: 'oil' },
@@ -92,5 +101,6 @@ export default {
   ],
   tests: [
     { name: '기름칠 없이 레버를 당기면 문이 안 열린다', actions: [{ type: 'interact', target: 'lever' }, { type: 'interact', target: 'door' }], expect: { flag: ['!doorOpen'], cleared: false } },
+    { name: '열린 문으로 "가기"만 해도 나간다', actions: [{ type: 'pickup', target: 'oil' }, { type: 'use', target: 'lever', item: '기름통' }, { type: 'interact', target: 'lever' }, { type: 'move', target: 'door' }], expect: { cleared: true } },
   ],
 };

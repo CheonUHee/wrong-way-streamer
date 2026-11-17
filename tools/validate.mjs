@@ -67,10 +67,18 @@ for (const stage of targets) {
       const k = c.replace(/^!/, '');
       if (k.startsWith('has:')) { if (!itemNames.has(k.slice(4))) E(`${where}: 조건 '${c}'의 아이템이 items에 없음`); }
       else if (k.startsWith('at:')) { if (!ids.has(k.slice(3))) E(`${where}: 조건 '${c}'의 오브젝트가 없음`); }
+      else if (k.startsWith('area:')) { if (!stage.areas[k.slice(5)]) E(`${where}: 조건 '${c}'의 구역이 없음`); }
+      else if (k.startsWith('dead:')) { if (!(Number(k.slice(5)) >= 1)) E(`${where}: 조건 '${c}'의 횟수가 숫자가 아님`); }
       else if (!setFlags.has(k) && !c.startsWith('!')) W(`${where}: 플래그 '${k}'를 켜는 규칙이 없어 이 조건은 항상 거짓`);
     }
   };
   for (const o of objs) { checkConds(o.showIf, `오브젝트 ${o.id}.showIf`); checkConds(o.exitIf, `오브젝트 ${o.id}.exitIf`); }
+  (stage.viewers?.script || []).forEach((v, i) => {
+    const w = `시청자 대본 #${i + 1}`;
+    if (!['troll', 'helper', 'crowd'].includes(v.role)) E(`${w}: role은 troll·helper·crowd 중 하나`);
+    if (!v.text) E(`${w}: text 없음`);
+    checkConds(v.when, w);
+  });
   (stage.rules || []).forEach((r, i) => {
     const w = `규칙 #${i + 1}(${[].concat(r.target).join(',')})`;
     for (const t of [].concat(r.target)) if (!ids.has(t)) E(`${w}: 없는 오브젝트 '${t}'`);
@@ -136,7 +144,8 @@ for (const stage of targets) {
   }
 
   /* ── 4. 전수 탐색 ── */
-  const usesAt = JSON.stringify(stage).includes('"at:') || JSON.stringify(stage).includes("'at:");
+  const usesAt = JSON.stringify(stage).includes('"at:') || JSON.stringify(stage).includes("'at:")
+    || stage.objects.some(o => core.isTrap(stage, o));   // 함정은 "앞에 있는가"에 따라 결과가 달라진다
   const key = s => [s.area, s.cleared ? 'C' : '', Object.keys(s.flags).filter(k => s.flags[k]).sort().join(','), [...s.inv].sort().join(','), usesAt ? s.at : ''].join('|');
   const start = core.createState(stage);
   const nodes = new Map([[key(start), { s: start, from: null, act: null, next: [] }]]);

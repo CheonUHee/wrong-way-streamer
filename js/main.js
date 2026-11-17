@@ -1,5 +1,6 @@
 /* 진입점: 턴 진행(AI 호출 타이밍), 플레이어 입력, 프로토타입 컨트롤 */
-import { $, esc, pick, addLine, viewerLine, say, donate, setFace, drawBubble, NICKS } from './ui.js';
+import { $, esc, addLine, viewerLine, say, donate, setFace, drawBubble, chatNoise, markRead } from './ui.js';
+import * as viewers from './viewers.js';
 import { state, isBusy, perform, startFromUrl, restartStage } from './stage.js';
 import { EMOS, SYSTEM, aiOn, buildPrompt, callGemini, mockBrain, setOnConfigChange } from './ai.js';
 
@@ -10,9 +11,9 @@ function applyTurn(out, msgs) {
   say(line, emo);
   const result = perform({ type: String(a.type || 'idle'), target: a.target, item: a.item });
   const S = state();
-  S.last = result;
-  msgs.forEach(m => S.history.push(`시청자(${m.kind === 'dona' ? '후원' : '채팅'}): ${m.text}`));
-  S.history.push(`나: ${line}`, `결과: ${result}`);
+  S.last = result; S.noticed = null;           // 눈에 띈 것은 한 번 전달하면 잊는다
+  msgs.forEach(m => S.history.push(`${m.nick}(${m.kind === 'dona' ? '후원' : '채팅'}): ${m.text}`));
+  S.history.push(`한별(나): ${line}`, `결과: ${result}`);
   S.history = S.history.slice(-8);
   (Array.isArray(out.viewers) ? out.viewers : []).slice(0, 2)
     .forEach((v, i) => setTimeout(() => viewerLine(String(v).slice(0, 40)), 700 + i * 900));
@@ -22,20 +23,29 @@ function applyTurn(out, msgs) {
    비용 보호: 호출 간 최소 간격(MIN_GAP). 조용한 상태로 AUTO_LIMIT턴이 지나면 멈추지 않고
    IDLE_DELAY 간격으로 느려진다. 탭이 가려져 있으면 호출하지 않는다. */
 const MIN_GAP = 4000, AUTO_DELAY = 8000, AUTO_LIMIT = 6, IDLE_DELAY = 15000;
-let pending = [], inFlight = false, turnTimer, lastCall = 0, fails = 0, autoTurns = 0;
+let pending = [], inFlight = false, turnTimer, turnDue = 0, lastCall = 0, fails = 0, autoTurns = 0;
 // 주소 뒤에 ?auto=off 를 붙이면 스트리머가 스스로 행동하지 않는다(채팅·후원이 올 때만 반응. 테스트용)
 const AUTO_OFF = new URLSearchParams(location.search).get('auto') === 'off';
 function schedule(delay) {
   clearTimeout(turnTimer);
   if (AUTO_OFF && !pending.length) return;
-  turnTimer = setTimeout(turn, Math.max(delay, lastCall + MIN_GAP - Date.now()));
+  const wait = Math.max(delay, lastCall + MIN_GAP - Date.now());
+  turnDue = Date.now() + wait;
+  turnTimer = setTimeout(turn, wait);
 }
+// 이미 더 이른 턴이 잡혀 있으면 그대로 둔다(다른 시청자 채팅이 내 훈수 반응을 늦추지 않게)
+function scheduleBy(delay) { if (!turnDue || turnDue < Date.now() || Date.now() + delay < turnDue) schedule(delay); }
 async function turn() {
+  turnDue = 0;
   if (inFlight) return;
   // 걷기·사망·스테이지 전환 연출 중이거나 클리어 직후면 끝날 때까지 기다린다
   if (document.hidden || isBusy() || state().cleared) return schedule(1500);
-  const msgs = pending; pending = [];
-  if (msgs.length) { autoTurns = 0; setFace('think'); } else autoTurns++;
+  const raw = pending; pending = [];
+  // 채팅은 채팅창이 붐빌수록 놓친다(후원은 반드시 읽는다). 놓친 메시지는 스트리머에게 전달되지 않는다
+  const readChance = Math.max(0.35, 1 - chatNoise() * 0.1);
+  const msgs = raw.filter(m => m.kind === 'dona' || Math.random() < readChance).slice(-5);
+  raw.forEach(m => m.el && markRead(m.el, msgs.includes(m)));
+  if (raw.length) { autoTurns = 0; if (msgs.length) setFace('think'); } else autoTurns++;
   inFlight = true; lastCall = Date.now();
   const S = state();
   try {
@@ -52,6 +62,9 @@ async function turn() {
 }
 
 /* ── 플레이어 입력 ── */
+// AI에게 전달할 때 쓰는 플레이어 닉네임. 화면에는 '나'로 보이지만, 프롬프트에서 '나'는 한별 자신과 헷갈리므로 따로 둔다.
+// AI는 이 사람이 플레이어인지 모른다(다른 시청자와 똑같이 대한다).
+const PLAYER_NICK = '별똥별';
 let mode = 'chat', wallet = 1000;
 function setMode(m) {
   mode = m;
@@ -67,10 +80,13 @@ function send() {
     if (wallet < 100) { $('hint').textContent = '⚡이 부족해요. 채팅으로 지시해 보세요.'; return; }
     wallet -= 100; $('wallet').textContent = wallet.toLocaleString();
     donate('나', 100, v, true);
-    pending.push({ kind: 'dona', text: v }); schedule(1500);   // 알림이 뜨는 시간만큼 뒤에 반응
+    const m = { kind: 'dona', text: v, nick: PLAYER_NICK, role: 'me' };
+    pending.push(m); schedule(1500);   // 알림이 뜨는 시간만큼 뒤에 반응
+    viewers.onPlayerMessage(m);
   } else {
-    addLine(`<span class="nick">나</span>${esc(v)}`, 'me');
-    pending.push({ kind: 'chat', text: v }); schedule(1000);
+    const m = { kind: 'chat', text: v, nick: PLAYER_NICK, role: 'me', el: addLine(`<span class="nick">나</span>${esc(v)}`, 'me') };
+    pending.push(m); schedule(1000);
+    viewers.onPlayerMessage(m);
   }
   $('input').value = '';
 }
@@ -84,11 +100,10 @@ const SAMPLE = {
   sad: '헬프 미... 여기 아까 왔던 데 같은데...',
 };
 document.querySelectorAll('.proto [data-emo]').forEach(b => b.onclick = () => say(SAMPLE[b.dataset.emo], b.dataset.emo));
-$('otherDona').onclick = () => {                    // 다른 시청자의 후원도 스트리머가 읽는다(방해 요소)
-  const msg = pick(['저 반짝이는 상자 열어보자 ㅋㅋ', '저 오리 한 번만 꾹 눌러줘', '오늘도 방송 잘 보고 갑니다']);
-  donate(pick(NICKS)[0], pick([1000, 5000, 10000]), msg);
-  pending.push({ kind: 'dona', text: msg }); schedule(1500);
-};
+$('otherDona').onclick = () => viewers.trollNow();   // 방해꾼 후원을 바로 일으킨다(테스트용)
+
+// 방해꾼·조력자의 말도 스트리머 대기열에 들어간다. 후원은 곧바로 반응, 채팅은 다음 턴에 함께 읽는다
+viewers.connect(m => { pending.push(m); scheduleBy(m.kind === 'dona' ? 1500 : AUTO_DELAY); });
 $('resetBtn').onclick = () => { pending = []; restartStage(); schedule(2000); };
 $('guideBtn').onclick = e => { document.body.classList.toggle('guide'); e.target.classList.toggle('on'); drawBubble(); };
 

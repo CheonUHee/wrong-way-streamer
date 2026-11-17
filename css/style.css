@@ -76,20 +76,28 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .hud.goal { left: 1.5%; top: 2.5%; max-width: 30%; }
 .hud.goal b { color: var(--accent); }
 
-/* 인벤토리: 좌하단. 칸 아래에 아이템 이름 상시 표시 */
-.invwrap { position: absolute; left: 1.5%; bottom: 3%; display: flex; flex-direction: column; align-items: flex-start; gap: .8cqw; }
-.inv {
-  position: relative; display: grid; grid-template-columns: repeat(3, 5.8cqw); gap: .5cqw .2cqw;
-  padding: .7cqw .5cqw; background: #0007; border-radius: 1cqw; backdrop-filter: blur(4px);
+/* 인벤토리: 좌하단. 제목 줄(가방·개수)로 지도와 구분하고, 아이템 이름은 칸 안쪽 하단 알약에 표시 */
+.invwrap {
+  position: absolute; left: 1.5%; bottom: 3%; display: flex; flex-direction: column; gap: .5cqw;
+  padding: .6cqw; background: #0008; border: .1cqw solid #ffffff1f; border-radius: 1cqw; backdrop-filter: blur(4px);
 }
-.slot { display: flex; flex-direction: column; align-items: center; gap: .25cqw; }
-.slot .box {
-  width: 4.2cqw; height: 4.2cqw; border-radius: .7cqw; background: #ffffff12; border: .15cqw solid #ffffff26;
-  display: grid; place-items: center; font-size: 2.4cqw;
+.invhead { display: flex; justify-content: space-between; align-items: center; padding: 0 .2cqw; font-size: 1.1cqw; font-weight: 800; }
+.invhead b { color: var(--dim); font-weight: 700; font-variant-numeric: tabular-nums; }
+.inv { display: grid; grid-template-columns: repeat(3, 5cqw); gap: .4cqw; }
+.slot {
+  position: relative; width: 5cqw; height: 5cqw; border-radius: .7cqw; overflow: hidden;
+  background: #ffffff10; border: .12cqw solid #ffffff22; display: grid; place-items: center;
 }
-.slot .name { height: 1.3cqw; font-size: 1.05cqw; line-height: 1.3cqw; white-space: nowrap; text-shadow: 0 .1cqw .3cqw #000; }
-.slot.filled .box { background: #ffffff22; border-color: #ffffff55; }
-.slot.new .box { border-color: var(--accent); animation: pop .5s cubic-bezier(.2,1.6,.4,1); }
+.slot .box { font-size: 2.3cqw; line-height: 1; margin-top: -1cqw; }
+.slot .name {
+  position: absolute; left: .25cqw; right: .25cqw; bottom: .3cqw; padding: .1cqw .3cqw; border-radius: 99px;
+  background: #000000b3; font-size: .85cqw; line-height: 1.25; font-weight: 700; text-align: center;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.slot:not(.filled) .name { display: none; }
+.slot.filled { background: #ffffff1f; border-color: #ffffff4d; }
+.slot.new { border-color: var(--accent); }
+.slot.new .box { animation: pop .5s cubic-bezier(.2,1.6,.4,1); }
 @keyframes pop { from { transform: scale(.4); } }
 /* 아이템 획득 알림: 상단 중앙에 떴다가 사라짐 */
 .toast {
@@ -135,13 +143,18 @@ button { font: inherit; color: inherit; cursor: pointer; }
   opacity: 0; transform: scale(.9); transform-origin: 100% 50%; transition: opacity .15s, transform .2s cubic-bezier(.2,1.6,.4,1);
   pointer-events: none;
 }
-.bubble.show { opacity: 1; transform: none; }
-.bubble svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.bubble.show { opacity: 1; transform: none; animation: float 3.2s ease-in-out infinite; }
+/* 떠 있는 느낌: 바로 아래의 짙은 그림자 + 멀리 퍼지는 옅은 그림자 */
+.bubble svg {
+  position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible;
+  filter: drop-shadow(0 .25cqw .35cqw #0000002e) drop-shadow(0 1.3cqw 1.8cqw #00000045);
+}
 .bubble span { position: relative; }
-.bubble[data-emo="shout"], .bubble[data-emo="angry"] { font-size: 2.2cqw; font-weight: 900; }
-.bubble[data-emo="angry"].show { animation: shake .35s 2; }
-.bubble[data-emo="sad"] { color: #3a4763; font-weight: 500; }
+/* 놀람(소리침·화남): 뾰족한 모양, 굵은 글씨, 짧게 흔들린 뒤 둥실 */
+.bubble[data-shape="burst"] { font-size: 2.2cqw; font-weight: 900; }
+.bubble[data-shape="burst"].show { animation: shake .35s 2, float 3.2s ease-in-out .7s infinite; }
 @keyframes shake { 25% { translate: -.4cqw 0; } 75% { translate: .4cqw 0; } }
+@keyframes float { 50% { translate: 0 -.35cqw; } }
 
 /* ── 방송 정보 바 ── */
 .info { display: flex; align-items: center; gap: 12px; flex: none; }
@@ -166,6 +179,8 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .log p { margin: 0; word-break: break-all; }
 .log .nick { font-weight: 700; margin-right: 6px; }
 .log .me .nick { color: var(--me); }
+.log .readtag { margin-left: 6px; font-size: 11px; color: var(--me); opacity: .8; white-space: nowrap; }
+.log .readtag.missed { color: var(--dim); }
 .log .sys { color: var(--dim); font-size: 12px; text-align: center; }
 .log .streamer-line { background: #ffe14a14; border-left: 3px solid var(--accent); padding: 4px 8px; border-radius: 4px; }
 .log .streamer-line .nick { color: var(--accent); }

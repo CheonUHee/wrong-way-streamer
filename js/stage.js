@@ -3,6 +3,7 @@
 import { $, esc, setInv, toastItem, toast, addLine, setFace } from './ui.js';
 import * as core from './core.js';
 import * as view from './view3d.js';
+import * as viewers from './viewers.js';
 import { STAGES, EXTRA } from './stages/index.js';
 
 let idx = 0, stage, S, playing = Promise.resolve(), busy = false;
@@ -10,10 +11,15 @@ export const state = () => S;
 export const current = () => stage;
 export const isBusy = () => busy;
 
+// 화면의 자율 행동(배회·시선 뺏기)을 상태에 반영해 다음 AI 호출 때 알린다
+view.onWander(() => { if (S && !busy) { S.at = null; S.near = '구역 안을 돌아다니며 둘러보는 중'; } });
+view.onNotice(id => { if (S) S.noticed = id; });
+
 function syncInv(newIdx = -1) {
   setInv(S.inv.map(name => Object.values(stage.items).find(it => it.name === name) || { icon: '❔', name }), newIdx);
 }
 function header() {
+  viewers.reset(stage, state);
   $('goal').textContent = stage.goal;
   $('stageLabel').textContent = `Stage ${STAGES.includes(stage) ? idx + 1 : '★'} — ${stage.title}`;
 }
@@ -53,6 +59,7 @@ async function play(effects, st) {
     if (st !== S) return;                                      // 재생 중 스테이지가 바뀌었다
     if (e.type === 'moveTo') await view.moveTo(spec(e.obj));
     else if (e.type === 'act') await view.act(e.kind, spec(e.obj));
+    else if (e.type === 'explore') await view.explore();
     else if (e.type === 'gain') { const it = stage.items[e.item]; syncInv(S.inv.lastIndexOf(it.name)); toastItem(it); }
     else if (e.type === 'lose') syncInv();
     else if (e.type === 'render') view.render(stage, S);
@@ -64,7 +71,7 @@ async function play(effects, st) {
 }
 
 async function dieAndRespawn(reason) {
-  setFace('sad');
+  setFace('sad'); view.setAutonomy(false);
   await view.fall();
   $('deadReason').textContent = reason;
   $('dead').classList.add('show');
@@ -76,7 +83,7 @@ async function dieAndRespawn(reason) {
 }
 
 async function onClear() {
-  view.render(stage, S);
+  view.render(stage, S); view.setAutonomy(false);
   const last = idx < 0 || idx >= STAGES.length - 1;
   $('clearText').textContent = last ? '🎉 ALL CLEAR' : '🎉 STAGE CLEAR';
   $('clear').classList.add('show');

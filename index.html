@@ -22,8 +22,9 @@
 
       <div class="hud goal" data-zone="현재 목표"><b>🎯 목표</b> <span id="goal"></span></div>
 
-      <div class="invwrap">
-        <div class="inv" id="inv" data-zone="인벤토리 (칸 수 미정)"></div>
+      <div class="invwrap" data-zone="인벤토리">
+        <div class="invhead"><span>🎒 가방</span><b id="invCount">0/9</b></div>
+        <div class="inv" id="inv"></div>
       </div>
       <div class="toast" id="toast" data-zone="획득 알림"></div>
       <div class="hit" id="hit"></div>
@@ -74,7 +75,7 @@
       <button data-emo="angry">화남</button>
       <button data-emo="sad">시무룩</button>
       <span class="sep"></span>
-      <button id="otherDona">다른 시청자 도네</button>
+      <button id="otherDona">방해꾼 후원</button>
       <span class="sep"></span>
       <button id="resetBtn">스테이지 리셋</button>
       <span id="apiStat"></span>
