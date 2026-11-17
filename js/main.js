@@ -81,7 +81,7 @@ const SAMPLE = {
 };
 document.querySelectorAll('.proto [data-emo]').forEach(b => b.onclick = () => say(SAMPLE[b.dataset.emo], b.dataset.emo));
 $('otherDona').onclick = () => {                    // 다른 시청자의 후원도 스트리머가 읽는다(방해 요소)
-  const msg = pick(['저 반짝이는 상자 열어보자 ㅋㅋ', '고양이 인형 한 번만 만져줘', '오늘도 방송 잘 보고 갑니다']);
+  const msg = pick(['저 반짝이는 상자 열어보자 ㅋㅋ', '저 오리 한 번만 꾹 눌러줘', '오늘도 방송 잘 보고 갑니다']);
   donate(pick(NICKS)[0], pick([1000, 5000, 10000]), msg);
   pending.push({ kind: 'dona', text: msg }); schedule(1500);
 };

@@ -1,12 +1,16 @@
 /* 3D 게임 화면(Three.js). 스트리머 한별의 1인칭 시점.
    stage.js가 쓰는 함수: reset(stage), render(G, objects), moveTo(obj) → Promise, act(type, obj) → Promise
-   오브젝트는 지금은 단순한 도형이고, build* 함수만 무료 에셋(glTF) 로더로 바꾸면 된다. */
+   오브젝트는 KayKit · Tiny Treats 에셋(glTF). 바닥 타일은 에셋, 벽과 천장은 코드로 만든다(무료판에 맞는 벽이 없음). */
 import * as THREE from 'three';
 import { $ } from './ui.js';
+import { S, place, ownMaterials } from './assets.js';
 
 const EYE = 1.45;          // 눈높이(m)
 const WALK_SPEED = 2.2;    // 걷는 속도(m/s)
 const ROOM = { w: 10, d: 10, h: 3.5 };
+const COLOR = {            // KayKit 톤에 맞춘 파스텔 색
+  bg: 0x2a2433, wall: 0xf1dfcb, wainscot: 0xd9a98b, trim: 0xa8735a, ceil: 0xfaf3ea, frame: 0x8a5a44,
+};
 
 /* ── 기본 세팅 ── */
 const host = $('scene');
@@ -16,8 +20,7 @@ renderer.outputColorSpace = THREE.SRGBColorSpace;
 host.appendChild(renderer.domElement);
 
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x1a1d2a);
-scene.fog = new THREE.Fog(0x1a1d2a, 9, 18);
+scene.background = new THREE.Color(COLOR.bg);
 const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.01, 50);
 scene.add(camera);
 
@@ -29,32 +32,37 @@ function resize() {
 }
 new ResizeObserver(resize).observe(host);
 
-scene.add(new THREE.HemisphereLight(0xdfe6ff, 0x3a3328, 1.6));
-const sun = new THREE.DirectionalLight(0xfff2dd, 1.4);
+scene.add(new THREE.HemisphereLight(0xfff4e8, 0x8a7060, 2.2));
+const sun = new THREE.DirectionalLight(0xfff0dc, 1.6);
 sun.position.set(3, 6, 4); scene.add(sun);
-const ceilingLamp = new THREE.PointLight(0xffd9a0, 12, 0, 1.6);
-ceilingLamp.position.set(0, 3.2, 0); scene.add(ceilingLamp);
+const ceilingLamp = new THREE.PointLight(0xffd9a0, 5, 0, 1.4);
+ceilingLamp.position.set(0, 2.7, 0); scene.add(ceilingLamp);
 
-const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.8, ...extra });
+const mat = (color, extra = {}) => new THREE.MeshStandardMaterial({ color, roughness: 0.85, ...extra });
 const box = (w, h, d, m) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
 
 /* ── 방(바닥 · 벽 · 천장) ── */
-function checker() {
-  const c = document.createElement('canvas'); c.width = c.height = 128;
-  const g = c.getContext('2d');
-  g.fillStyle = '#5b5a63'; g.fillRect(0, 0, 128, 128);
-  g.fillStyle = '#4e4d56'; g.fillRect(0, 0, 64, 64); g.fillRect(64, 64, 64, 64);
-  const t = new THREE.CanvasTexture(c);
-  t.wrapS = t.wrapT = THREE.RepeatWrapping; t.repeat.set(5, 5); t.colorSpace = THREE.SRGBColorSpace;
-  return t;
+// 바닥: 던전 팩의 나무 바닥 타일(4×4)을 방 크기에 맞춰 3×3으로 깐다
+const TILE = ROOM.w / 3;
+for (let i = 0; i < 3; i++) for (let j = 0; j < 3; j++) {
+  place(scene, 'dungeon', 'floor_wood_large', { pos: [-ROOM.w / 2 + TILE * (i + 0.5), 0, -ROOM.d / 2 + TILE * (j + 0.5)], scale: TILE / 4 });
 }
-const floor = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, ROOM.d), mat(0xffffff, { map: checker() }));
-floor.rotation.x = -Math.PI / 2; scene.add(floor);
-const ceil = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, ROOM.d), mat(0x2b2e3a));
+const under = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, ROOM.d), mat(0x7a5a44));   // 타일 로딩 전·틈 가림
+under.rotation.x = -Math.PI / 2; under.position.y = -0.05; scene.add(under);
+const ceil = new THREE.Mesh(new THREE.PlaneGeometry(ROOM.w, ROOM.d), mat(COLOR.ceil));
 ceil.rotation.x = Math.PI / 2; ceil.position.y = ROOM.h; scene.add(ceil);
 
-const wallMat = mat(0x6d7489);
-const T = 0.2, DOOR_W = 1.2, DOOR_H = 2.3;
+const T = 0.2, DOOR_W = 1.6 * S, DOOR_H = 2.8 * S;      // 문 크기 = Bubbly Bathroom door_modular
+function wallPiece(w, h, d, x, y, z) {
+  // 벽 위쪽은 크림색, 아래 1m는 진한 색(징두리) + 경계 몰딩
+  const g = new THREE.Group(); g.position.set(x, y, z); scene.add(g);
+  const top = box(w, h, d, mat(COLOR.wall)); g.add(top);
+  const lowH = Math.min(1, Math.max(0, 1 - (y - h / 2)));
+  if (lowH > 0) {
+    const low = box(w + 0.02, lowH, d + 0.02, mat(COLOR.wainscot)); low.position.y = -h / 2 + lowH / 2; g.add(low);
+    const rail = box(w + 0.04, 0.06, d + 0.04, mat(COLOR.trim)); rail.position.y = -h / 2 + lowH; g.add(rail);
+  }
+}
 const walls = [
   [ROOM.w, ROOM.h, T, 0, ROOM.h / 2, ROOM.d / 2],          // 뒤
   [T, ROOM.h, ROOM.d, -ROOM.w / 2, ROOM.h / 2, 0],         // 왼쪽
@@ -64,85 +72,83 @@ const walls = [
   [(ROOM.w - DOOR_W) / 2, ROOM.h, T, (ROOM.w + DOOR_W) / 4, ROOM.h / 2, -ROOM.d / 2],
   [DOOR_W, ROOM.h - DOOR_H, T, 0, (ROOM.h + DOOR_H) / 2, -ROOM.d / 2],
 ];
-for (const [w, h, d, x, y, z] of walls) { const m = box(w, h, d, wallMat); m.position.set(x, y, z); scene.add(m); }
-// 벽 아래 걸레받이 + 천장 파이프(창고 분위기용 장식. AI에게는 알리지 않는다)
-const trim = mat(0x3c4152);
-for (const [w, d, x, z] of [[ROOM.w, 0.05, 0, ROOM.d / 2 - 0.12], [0.05, ROOM.d, -ROOM.w / 2 + 0.12, 0], [0.05, ROOM.d, ROOM.w / 2 - 0.12, 0]]) {
-  const m = box(w, 0.15, d, trim); m.position.set(x, 0.075, z); scene.add(m);
-}
-const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.08, ROOM.d, 12), mat(0x7a7f8c, { metalness: 0.6, roughness: 0.4 }));
-pipe.rotation.x = Math.PI / 2; pipe.position.set(3.2, ROOM.h - 0.3, 0); scene.add(pipe);
+for (const w of walls) wallPiece(...w);
 // 문 밖에서 새어 드는 빛(문이 열리면 보인다)
 const outside = new THREE.Mesh(new THREE.PlaneGeometry(DOOR_W * 4, DOOR_H * 2), new THREE.MeshBasicMaterial({ color: 0xfff6d8 }));
 outside.position.set(0, DOOR_H / 2, -ROOM.d / 2 - 1.6); scene.add(outside);
+
+// 장식(AI에게는 알리지 않는 배경 소품). 동선을 막지 않게 벽과 구석에만 둔다.
+const DECOR = [
+  ['furniture', 'rug_rectangle_stripes_A', [0, 0.01, 0.2], Math.PI / 2],
+  ['furniture', 'armchair_pillows',    [-3.9, 0, 3.9],           Math.PI * 0.75],
+  ['furniture', 'lamp_standing',       [4.4, 0, 4.4],            0],
+  ['furniture', 'couch_pillows',       [1.2, 0, 4.35],           Math.PI],
+  ['furniture', 'pictureframe_large_A',[-4.9 + T / 2, 1.9, 1.6], Math.PI / 2],
+  ['furniture', 'pictureframe_medium', [4.9 - T / 2, 1.8, -0.5], -Math.PI / 2],
+  ['bath',      'plant',               [1.5, 0, -4.4],           0],
+  ['furniture', 'cactus_medium_A',     [-1.5, 0, -4.5],          0],
+];
+for (const [p, n, pos, rotY] of DECOR) place(scene, p, n, { pos, rotY });
 
 /* ── 오브젝트 ── */
 const OBJ = {};          // id → { root, ...애니메이션용 부품 }
 const BUILD = {
   door(o) {
     const root = new THREE.Group();
-    const frameMat = mat(0x3d2a19);
+    const frameMat = mat(COLOR.frame);
     for (const [w, h, x, y] of [[0.12, DOOR_H, -DOOR_W / 2 - 0.06, DOOR_H / 2], [0.12, DOOR_H, DOOR_W / 2 + 0.06, DOOR_H / 2], [DOOR_W + 0.24, 0.12, 0, DOOR_H + 0.06]]) {
-      const f = box(w, h, 0.3, frameMat); f.position.set(x, y, 0); root.add(f);
+      const f = box(w, h, 0.34, frameMat); f.position.set(x, y, 0); root.add(f);
     }
-    const hinge = new THREE.Group(); hinge.position.set(-DOOR_W / 2, 0, 0.05); root.add(hinge);
-    const panel = box(DOOR_W, DOOR_H, 0.08, mat(0x7a5232)); panel.position.set(DOOR_W / 2, DOOR_H / 2, 0); hinge.add(panel);
-    for (const y of [0.6, 1.7]) { const p = box(DOOR_W * 0.75, 0.6, 0.02, mat(0x6b4728)); p.position.set(DOOR_W / 2, y, 0.05); hinge.add(p); }
-    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.05), mat(0xd8b25a, { metalness: 0.8, roughness: 0.3 }));
-    knob.position.set(DOOR_W - 0.12, 1.05, 0.08); hinge.add(knob);
-    root.position.set(o.pos[0], 0, o.pos[2] + T / 2 + 0.01);
+    const hinge = new THREE.Group(); hinge.position.set(-DOOR_W / 2, 0, 0); root.add(hinge);
+    place(hinge, 'bath', 'door_modular');                     // 모델 원점이 경첩 쪽 모서리
+    root.position.set(o.pos[0], 0, o.pos[2]);
     return { root, hinge, open: 0 };
   },
-  lever(o) {
+  lever(o) {             // 레버 에셋이 없어 코드로 만든다
     const root = new THREE.Group();
-    root.add(box(0.06, 0.45, 0.3, mat(0x55596a, { metalness: 0.5 })));
+    root.add(box(0.06, 0.5, 0.34, mat(COLOR.frame)));
     const pivot = new THREE.Group(); pivot.position.x = 0.05; root.add(pivot);
-    const armMat = mat(0x8a5a3c, { metalness: 0.4, roughness: 0.9 });          // 녹슨 색 → 기름칠하면 은색
-    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.025, 0.025, 0.42, 10), armMat); arm.position.y = 0.21; pivot.add(arm);
-    const grip = new THREE.Mesh(new THREE.SphereGeometry(0.06), mat(0xd8433a)); grip.position.y = 0.44; pivot.add(grip);
+    const armMat = mat(0x9a6a48, { metalness: 0.3, roughness: 0.95 });         // 녹슨 색 → 기름칠하면 은색
+    const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.44, 10), armMat); arm.position.y = 0.22; pivot.add(arm);
+    const grip = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 12), mat(0xff6f6f)); grip.position.y = 0.46; pivot.add(grip);
     root.position.set(o.pos[0] + T / 2, o.pos[1], o.pos[2]);
     return { root, pivot, armMat, down: 0 };
   },
   oil(o) {
     const root = new THREE.Group();
-    const wood = mat(0x8b6a45);
-    for (const y of [0.45, 0.95]) { const s = box(1.1, 0.05, 1.1, wood); s.position.y = y; root.add(s); }
-    for (const [x, z] of [[-0.5, -0.5], [0.5, -0.5], [-0.5, 0.5], [0.5, 0.5]]) { const l = box(0.05, 0.98, 0.05, wood); l.position.set(x, 0.49, z); root.add(l); }
-    const can = new THREE.Group(); can.position.y = 0.975; root.add(can);
-    const body = new THREE.Mesh(new THREE.CylinderGeometry(0.11, 0.11, 0.26, 16), mat(0xd8433a, { roughness: 0.5 })); body.position.y = 0.13; can.add(body);
-    const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.06, 8), mat(0x333333)); cap.position.set(0.05, 0.29, 0); can.add(cap);
-    root.position.set(o.pos[0], 0, o.pos[2]);
+    place(root, 'furniture', 'cabinet_small');                // 높이 0.8
+    const can = new THREE.Group(); can.position.y = 0.8; root.add(can);
+    place(can, 'proto', 'Can_A').then(m => {                  // 빨간 통으로 칠한다
+      if (m) ownMaterials(m).traverse(x => { if (x.isMesh) x.material.color.set(0xff4a3d); });
+    });
+    root.position.set(o.pos[0], 0, o.pos[2]); root.rotation.y = Math.PI / 4;
     return { root, can };
   },
   box(o) {
     const root = new THREE.Group();
-    const gold = mat(0xe0b02a, { metalness: 0.7, roughness: 0.35, emissive: 0x6b4a00, emissiveIntensity: 1 });
-    const base = box(0.7, 0.35, 0.5, gold); base.position.y = 0.175; root.add(base);
-    const lidHinge = new THREE.Group(); lidHinge.position.set(0, 0.35, -0.25); root.add(lidHinge);
-    const lid = box(0.72, 0.12, 0.52, gold); lid.position.set(0, 0.06, 0.25); lidHinge.add(lid);
-    const glow = new THREE.PointLight(0xffd65a, 3, 4, 2); glow.position.y = 0.7; root.add(glow);
-    const sparkles = new THREE.Group(); root.add(sparkles);
+    const e = { root, open: 0, mats: [] };
+    place(root, 'dungeon', 'chest_gold', { scale: 0.5 }).then(m => {
+      if (!m) return;
+      ownMaterials(m).traverse(x => { if (x.isMesh) { x.material.emissive = new THREE.Color(0x7a5200); e.mats.push(x.material); } });
+      e.lid = m.getObjectByName('chest_gold_lid');
+    });
+    e.glow = new THREE.PointLight(0xffd65a, 3, 4, 2); e.glow.position.y = 0.9; root.add(e.glow);
+    e.sparkles = new THREE.Group(); root.add(e.sparkles);
     const spMat = new THREE.MeshBasicMaterial({ color: 0xfff6b0 });
-    for (let i = 0; i < 6; i++) { const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.035), spMat); s.userData.phase = i; sparkles.add(s); }
-    root.position.set(o.pos[0], 0, o.pos[2]);
-    return { root, lidHinge, gold, glow, sparkles, open: 0 };
+    for (let i = 0; i < 6; i++) { const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.035), spMat); s.userData.phase = i; e.sparkles.add(s); }
+    root.position.set(o.pos[0], 0, o.pos[2]); root.rotation.y = Math.PI * 0.15;
+    return e;
   },
-  cat(o) {
+  duck(o) {
     const root = new THREE.Group();
     const body = new THREE.Group(); root.add(body);
-    const pink = mat(0xf2a7c8);
-    const torso = new THREE.Mesh(new THREE.SphereGeometry(0.2, 16, 12), pink); torso.scale.set(1, 1.15, 0.9); torso.position.y = 0.23; body.add(torso);
-    const head = new THREE.Mesh(new THREE.SphereGeometry(0.17, 16, 12), pink); head.position.y = 0.55; body.add(head);
-    for (const x of [-0.09, 0.09]) {
-      const ear = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.12, 8), pink); ear.position.set(x, 0.72, 0); body.add(ear);
-      const eye = new THREE.Mesh(new THREE.SphereGeometry(0.022), mat(0x222222)); eye.position.set(x * 0.7, 0.58, 0.15); body.add(eye);
-    }
-    root.position.set(o.pos[0], 0, o.pos[2]); root.rotation.y = -0.6;      // 방 가운데 쪽을 본다
+    place(body, 'bath', 'ducky', { scale: 1.8 });             // 큰 고무 오리(높이 약 0.7)
+    root.position.set(o.pos[0], 0, o.pos[2]); root.rotation.y = -Math.PI * 0.75;   // 방 가운데 쪽을 본다
     return { root, body };
   },
 };
 function buildObjects(stage) {
-  for (const k in OBJ) scene.remove(OBJ[k].root);
+  for (const k in OBJ) { scene.remove(OBJ[k].root); delete OBJ[k]; }
   for (const o of stage.objects) { OBJ[o.id] = (BUILD[o.id] || BUILD.box)(o); scene.add(OBJ[o.id].root); }
 }
 
@@ -209,7 +215,7 @@ export function reset(stage) {
 export function render(G, objects) {
   objectsNow = objects;
   if (OBJ.door) OBJ.door.target = G.doorOpen ? 1 : 0;
-  if (OBJ.lever) { OBJ.lever.target = G.doorOpen ? 1 : 0; OBJ.lever.armMat.color.set(G.oiled ? 0xc7ccd6 : 0x8a5a3c); OBJ.lever.armMat.metalness = G.oiled ? 0.9 : 0.4; }
+  if (OBJ.lever) { OBJ.lever.target = G.doorOpen ? 1 : 0; OBJ.lever.armMat.color.set(G.oiled ? 0xd5dbe6 : 0x9a6a48); OBJ.lever.armMat.metalness = G.oiled ? 0.9 : 0.3; }
   if (OBJ.box) OBJ.box.target = G.boxOpened ? 1 : 0;
   if (OBJ.oil) OBJ.oil.can.visible = !G.oilTaken;
   $('clear').classList.toggle('show', G.cleared);
@@ -292,9 +298,9 @@ function frame() {
   if (OBJ.lever) { const l = OBJ.lever; l.down = ease(l.down, l.target || 0, 8); l.pivot.rotation.z = -0.35 - 2.3 * l.down; }
   if (OBJ.box) {
     const b = OBJ.box; b.open = ease(b.open, b.target || 0, 4);
-    b.lidHinge.rotation.x = -1.9 * b.open;
+    if (b.lid) b.lid.rotation.x = -1.7 * b.open;
     b.glow.intensity = (1 - b.open) * (2.5 + Math.sin(t * 4) * 1.2);
-    b.gold.emissiveIntensity = (1 - b.open) * (0.8 + Math.sin(t * 4) * 0.4);
+    for (const m of b.mats) m.emissiveIntensity = (1 - b.open) * (0.6 + Math.sin(t * 4) * 0.35);
     b.sparkles.visible = b.open < 0.5;
     b.sparkles.children.forEach(s => {
       const a = t * 1.4 + s.userData.phase * 1.05;
@@ -302,7 +308,7 @@ function frame() {
       s.rotation.y = t * 3;
     });
   }
-  if (OBJ.cat) { const c = OBJ.cat.body; c.rotation.z = Math.sin(t * 6) * 0.25; c.position.y = Math.abs(Math.sin(t * 6)) * 0.06; }
+  if (OBJ.duck) { const c = OBJ.duck.body; c.rotation.z = Math.sin(t * 6) * 0.22; c.rotation.y = Math.sin(t * 1.5) * 0.6; c.position.y = Math.abs(Math.sin(t * 6)) * 0.08; }
 
   renderer.render(scene, camera);
   requestAnimationFrame(frame);

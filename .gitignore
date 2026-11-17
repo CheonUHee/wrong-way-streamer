@@ -2,3 +2,12 @@
 .DS_Store
 Thumbs.db
 *.log
+
+# 에셋 팩: 웹에서 쓰는 glTF와 텍스처만 올린다(FBX·OBJ·샘플·원본은 용량이 커서 제외)
+assets/models/**/fbx/
+assets/models/**/fbx(unity)/
+assets/models/**/fbx (unity)/
+assets/models/**/obj/
+assets/models/**/Samples/
+assets/models/**/samples/
+assets/models/**/*.blend
