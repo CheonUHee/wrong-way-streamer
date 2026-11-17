@@ -18,12 +18,7 @@
 <div class="layout">
   <div class="main">
     <div class="stage" id="stage" data-zone="게임 화면 (16:9)">
-      <div class="scene">
-        <div class="scene-label">3D 게임 화면 (플레이스홀더)</div>
-        <div class="floor"></div>
-        <div id="objs"></div>
-        <div class="pc" id="pc" title="게임 속 캐릭터">🙂</div>
-      </div>
+      <div class="scene" id="scene"></div>
 
       <div class="hud goal" data-zone="현재 목표"><b>🎯 목표</b> <span id="goal"></span></div>
 
@@ -116,6 +111,9 @@
   <div class="btns"><button id="cfgCancel">닫기</button><button class="primary" id="cfgSave">저장</button></div>
 </dialog>
 
+<script type="importmap">
+{ "imports": { "three": "https://cdn.jsdelivr.net/npm/three@0.170.0/build/three.module.js" } }
+</script>
 <script type="module" src="js/main.js"></script>
 </body>
 </html>

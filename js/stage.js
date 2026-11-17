@@ -1,19 +1,23 @@
 /* 스테이지 데이터와 게임 규칙. AI가 고른 행동을 실제로 실행하는 곳 */
 import { $, inv, gain, removeItem, renderInv } from './ui.js';
-import * as view from './view2d.js';
+import * as view from './view3d.js';     // 임시 2D 화면으로 되돌리려면 './view2d.js'
 
-/* ── 미니 스테이지(3D 화면 대신 쓰는 임시 규칙) ──
+/* ── 스테이지 1: 수상한 창고 ──
    정답 순서: 빨간 통(기름통) 줍기 → 레버에 사용 → 레버 당기기 → 문으로 나가기.
-   반짝이는 상자와 고양이 인형은 한눈팔기용이다. */
+   반짝이는 상자와 고양이 인형은 한눈팔기용이다.
+
+   좌표(3D, 단위 m): 방은 x -5~5, z -5~5, 높이 3.5. 정면(문)이 -z 방향.
+   pos   = 오브젝트 위치, stand = 상호작용할 때 서는 바닥 지점 [x, z], look = 바라보는 지점
+   x·y·w·h = 임시 2D 화면용 위치(%) */
 export const STAGE = {
   goal: '문을 열고 방에서 나가기',
-  start: { x: 50, y: 66 },
+  start: { x: 50, y: 66, pos: [0, 3.5], look: [0, 1.3, -5] },
   objects: [
-    { id: 'door',  cls: 'door',  icon: '',    x: 44, y: 26, w: 9, h: 30 },
-    { id: 'lever', cls: 'lever', icon: '🕹️', x: 24, y: 44, w: 5, h: 12 },
-    { id: 'oil',   cls: 'oil',   icon: '🛢️', x: 10, y: 32, w: 5, h: 8 },
-    { id: 'box',   cls: 'box',   icon: '✨',  x: 64, y: 46, w: 7, h: 11 },
-    { id: 'cat',   cls: 'cat',   icon: '🐱',  x: 82, y: 30, w: 6, h: 10 },
+    { id: 'door',  cls: 'door',  icon: '',    x: 44, y: 26, w: 9, h: 30, pos: [0, 0, -5],        stand: [0, -3.5],    look: [0, 1.3, -5] },
+    { id: 'lever', cls: 'lever', icon: '🕹️', x: 24, y: 44, w: 5, h: 12, pos: [-5, 1.25, -1.5],   stand: [-3.8, -1.5], look: [-5, 1.3, -1.5] },
+    { id: 'oil',   cls: 'oil',   icon: '🛢️', x: 10, y: 32, w: 5, h: 8,  pos: [-4.35, 0, -4.35], stand: [-3.3, -3.3], look: [-4.35, 1.1, -4.35] },
+    { id: 'box',   cls: 'box',   icon: '✨',  x: 64, y: 46, w: 7, h: 11, pos: [2, 0, -1],         stand: [2, 0.4],     look: [2, 0.4, -1] },
+    { id: 'cat',   cls: 'cat',   icon: '🐱',  x: 82, y: 30, w: 6, h: 10, pos: [4, 0, -3.6],       stand: [3, -2.5],    look: [4, 0.45, -3.6] },
   ],
 };
 export const NAME = { door: '문', lever: '레버', oil: '빨간 통', box: '상자', cat: '고양이 인형' };
@@ -29,14 +33,15 @@ export const visible = () => STAGE.objects.filter(o => !(o.id === 'oil' && G.oil
 const renderScene = () => view.render(G, visible());
 export function resetStage() {
   G = { doorOpen: false, oiled: false, boxOpened: false, oilTaken: false, cleared: false, at: null, seen: new Set(), last: '방송을 막 시작했다', history: [], autoTurns: 0 };
-  inv.length = 0; renderInv(); renderScene(); view.moveTo(STAGE.start);
+  inv.length = 0; renderInv(); view.reset(STAGE); renderScene();
   $('goal').textContent = STAGE.goal;
 }
 // AI가 고른 행동을 게임 규칙에 따라 실행하고, 결과 문장을 돌려준다(다음 호출 때 AI에게 전달).
+// 규칙 판정은 즉시 하고, 화면 반영(아이템 획득·문 열림 등)은 캐릭터가 걸어가 손을 뻗은 뒤에 한다.
 export function perform(a) {
   const o = visible().find(v => v.id === a.target);
   if (a.type === 'idle' || !o) return '제자리에 서 있다';
-  view.moveTo(o); G.at = o.id; G.seen.add(o.id);
+  const arrived = view.moveTo(o); G.at = o.id; G.seen.add(o.id);
   const has = n => inv.some(i => i[1] === n);
   let r, fx = () => {};
   if (a.type === 'move') r = `${NAME[o.id]} 앞으로 갔다`;
@@ -61,6 +66,10 @@ export function perform(a) {
     else { G.boxOpened = true; fx = () => gain('coin'); r = '상자를 열었더니 낡은 동전이 하나 들어 있었다'; }
   }
   else r = '인형이 야옹 소리를 내며 더 신나게 춤춘다. 그것뿐이다';
-  setTimeout(() => { fx(); renderScene(); }, 1000);     // 캐릭터가 걸어간 뒤에 화면 반영
+  const stage = G;
+  arrived.then(() => view.act(a.type, o)).then(() => {
+    if (stage !== G) return;                           // 그 사이 스테이지가 리셋됐으면 버린다
+    fx(); renderScene();
+  });
   return r;
 }
