@@ -55,7 +55,7 @@ for (const stage of targets) {
     for (const k of ['name', 'desc']) if (!o[k]) E(`${w}: ${k} 없음`);
     if (o.pos?.length !== 3 || o.stand?.length !== 2 || o.look?.length !== 3) E(`${w}: pos(3)·stand(2)·look(3) 좌표 확인`);
     if (o.model?.name && !fileExists(o.model.pack, o.model.name)) E(`${w}: 모델 파일 없음 ${o.model.pack}/${o.model.name}`);
-    if (!o.model?.name && !['lever', 'sign'].includes(o.kind)) E(`${w}: model이 없고 코드로 만드는 kind(lever·sign)도 아님`);
+    if (!o.model?.name && !['lever', 'sign', 'button', 'spot'].includes(o.kind)) E(`${w}: model이 없고 코드로 만드는 kind(lever·sign·button·spot)도 아님`);
     if (o.exit) areaEntry(o.exit, `${w}.exit`);
   }
   for (const [id, en] of Object.entries(stage.enemies || {})) if (!fileExists(en.model.pack, en.model.name)) E(`적 ${id}: 모델 파일 없음`);
@@ -79,19 +79,25 @@ for (const stage of targets) {
     if (!v.text) E(`${w}: text 없음`);
     checkConds(v.when, w);
   });
-  (stage.rules || []).forEach((r, i) => {
-    const w = `규칙 #${i + 1}(${[].concat(r.target).join(',')})`;
-    for (const t of [].concat(r.target)) if (!ids.has(t)) E(`${w}: 없는 오브젝트 '${t}'`);
-    if (r.item && !itemNames.has(r.item)) E(`${w}: 아이템 '${r.item}'이 items에 없음`);
-    checkConds(r.if, w);
-    for (const d of [].concat(r.do || [])) {
+  const checkDo = (list, w) => {
+    for (const d of [].concat(list || [])) {
       const [cmd, arg = ''] = d.split(/:(.*)/s);
       if (cmd === 'give' && !items[arg]) E(`${w}: give '${arg}' — items에 없는 키`);
       if (cmd === 'take' && !itemNames.has(arg)) E(`${w}: take '${arg}' — items에 없는 이름`);
       if (cmd === 'goto') areaEntry(arg, w);
       if (cmd === 'enemy' && !stage.enemies?.[arg]) E(`${w}: 없는 적 '${arg}'`);
-      if (!['set', 'unset', 'give', 'take', 'goto', 'enemy', 'die', 'clear'].includes(cmd)) E(`${w}: 모르는 명령 '${d}'`);
+      if (!['set', 'unset', 'give', 'take', 'goto', 'enemy', 'die', 'clear', 'ask', 'checkpoint'].includes(cmd)) E(`${w}: 모르는 명령 '${d}'`);
+      if (cmd === 'set') setFlags.add(arg);
     }
+  };
+  for (const [aid, a] of Object.entries(stage.areas)) if (a.enter) checkDo(a.enter.do, `구역 ${aid}.enter`);
+  for (const t of stage.tutorial || []) if (!(typeof t.on === 'string' && t.on.startsWith('@'))) checkConds(t.on, '튜토리얼 조건');
+  (stage.rules || []).forEach((r, i) => {
+    const w = `규칙 #${i + 1}(${[].concat(r.target).join(',')})`;
+    for (const t of [].concat(r.target)) if (!ids.has(t)) E(`${w}: 없는 오브젝트 '${t}'`);
+    if (r.item && !itemNames.has(r.item)) E(`${w}: 아이템 '${r.item}'이 items에 없음`);
+    checkConds(r.if, w);
+    checkDo(r.do, w);
     if (!r.say) W(`${w}: say(결과 문장) 없음 — AI가 무슨 일이 일어났는지 알 수 없다`);
   });
 

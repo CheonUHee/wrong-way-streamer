@@ -164,7 +164,7 @@ export const NICKS = [['감자튀김', '#ff9e6b'], ['눈팅러', '#9bd0ff'], ['�
 const CHATS = ['ㅋㅋㅋㅋㅋ', '아니 거기 아닌데요...', '이게 방송이지', '오늘 안에 깨긴 하냐', '귀여우니까 봐준다', '또 딴 데 본다 ㅋㅋ', '집중 집중!!', 'ㄹㅇㅋㅋ', '답답해서 내가 한다'];
 export const pick = a => a[Math.floor(Math.random() * a.length)];
 export function viewerLine(text) { const [n, c] = pick(NICKS); addLine(`<span class="nick" style="color:${c}">${n}</span>${esc(text)}`); }
-function fakeChat() { viewerLine(pick(CHATS)); setTimeout(fakeChat, 2500 + Math.random() * 5000); }
+function fakeChat() { if (!document.body.classList.contains('paused')) viewerLine(pick(CHATS)); setTimeout(fakeChat, 2500 + Math.random() * 5000); }
 addLine('지지직 채팅방에 입장했습니다.', 'sys');
 fakeChat();
 
@@ -188,8 +188,9 @@ export function toast(html, ms = 3000) {
 export const toastItem = it => toast(`${it.icon} <em>${esc(it.name)}</em> 획득!`);
 
 /* ── 방송 시간(= 스테이지 경과 시간) ── */
-const t0 = Date.now();
+let elapsed = 0;                     // 일시정지(튜토리얼) 중에는 멈춘다
 setInterval(() => {
-  const s = Math.floor((Date.now() - t0) / 1000);
+  if (!document.body.classList.contains('paused')) elapsed++;
+  const s = elapsed;
   $('timer').textContent = [Math.floor(s / 3600), Math.floor(s / 60) % 60, s % 60].map(v => String(v).padStart(2, '0')).join(':');
 }, 1000);

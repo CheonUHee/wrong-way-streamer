@@ -1,106 +1,176 @@
-/* 스테이지 1: 아늑한 방 (임시 튜토리얼)
-   정답: 빨간 통 줍기 → 레버에 기름통 사용 → 레버 당기기 → 문 열고 나가기
-   한눈팔기: 반짝이는 보물 상자, 춤추는 고무 오리
-   데이터 형식 설명은 js/stages/README.md */
+/* 스테이지 1: 튜토리얼 연습장 (테마: Prototype)
+   설계 로그: docs/stages/stage1.md
+   흐름: 연습장 1(버튼 → 문: 상호작용) → 연습장 2(열쇠 줍기 → 문에 쓰기: 아이템) → 연습장 3(갈림길: 한별이 묻는다 + 플레이어만 보는 안내판 + 방해꾼 후원)
+   정답: 빨간 버튼 → 문 → 열쇠 줍기 → 열쇠를 문에 → 문 → 왼쪽 문 */
+const room = (extra = {}) => ({ kind: 'room', w: 8, d: 8, h: 3.5, grid: true, ...extra });
+const DOOR = { pack: 'proto', name: 'Door_A' };
+
 export default {
   id: 'stage1',
-  title: '아늑한 방',
-  goal: '문을 열고 방에서 나가기',
-  start: { area: 'room', entry: 'start' },
+  title: '튜토리얼 연습장',
+  goal: '연습장 세 칸을 지나 출구로 나가기',
+  start: { area: 'room1', entry: 'start' },
 
-  items: {
-    oil:  { icon: '🛢️', name: '기름통' },
-    coin: { icon: '🪙', name: '낡은 동전' },
-  },
+  items: { key: { icon: '🗝️', name: '열쇠' } },
 
   areas: {
-    room: {
-      name: '아늑한 방',
-      env: {
-        kind: 'room', w: 10, d: 10, h: 3.5,
-        floor: { pack: 'dungeon', name: 'floor_wood_large' },
-        openings: { north: [{ x: 0, w: 1.28, h: 2.24 }] },
-      },
-      entries: { start: { pos: [0, 3.5], look: [0, 1.3, -5] } },
+    room1: {
+      name: '연습장 1',
+      env: room({ openings: { north: [{ x: 0, w: 1.28, h: 2.24 }] } }),
+      entries: { start: { pos: [0, 2.6], look: [0, 1.3, -4] } },
       decor: [
-        ['furniture', 'rug_rectangle_stripes_A', [0, 0.01, 0.2], Math.PI / 2],
-        ['furniture', 'armchair_pillows', [-3.9, 0, 3.9], Math.PI * 0.75],
-        ['furniture', 'lamp_standing', [4.4, 0, 4.4]],
-        ['furniture', 'couch_pillows', [1.2, 0, 4.35], Math.PI],
-        ['furniture', 'pictureframe_large_A', [-4.8, 1.9, 1.6], Math.PI / 2],
-        ['furniture', 'pictureframe_medium', [4.8, 1.8, -0.5], -Math.PI / 2],
-        ['bath', 'plant', [1.5, 0, -4.4]],
-        ['furniture', 'cactus_medium_A', [-1.5, 0, -4.5]],
-        ['furniture', 'cabinet_small', [-4.3, 0, -4.3], Math.PI / 4],     // 빨간 통 받침
+        ['proto', 'Dummy_Base', [-3, 0, 2.9], 0.6],
+        ['proto', 'Box_A', [3.2, 0, 3.1], 0.3],
+        ['proto', 'Box_B', [3.3, 0.41, 3.1], 1.1],
+        ['proto', 'Pallet_Small', [-3.1, 0, -3.1], 0.2],
+        ['proto', 'Cube_Prototype_Small', [3.3, 0, 0.4], 0, 0.45],
+      ],
+    },
+    room2: {
+      name: '연습장 2',
+      env: room({ openings: { north: [{ x: 0, w: 1.28, h: 2.24 }] } }),
+      entries: { start: { pos: [0, 2.6], look: [0, 1.3, -4] } },
+      decor: [
+        ['proto', 'Barrel_A', [3.3, 0.4, 3.2]],
+        ['proto', 'Barrel_A', [2.4, 0.4, 3.3]],
+        ['proto', 'target_stand_A', [-3.2, 0, 3], 0.8],
+        ['proto', 'Box_A', [-3.3, 0, 0.6], 0.5],
+      ],
+    },
+    room3: {
+      name: '연습장 3',
+      env: room({ w: 10, openings: { north: [{ x: -2.5, w: 1.28, h: 2.24 }] } }),
+      entries: { start: { pos: [0, 2.6], look: [0, 1.5, -4] } },
+      // 들어서자마자 한별이 시청자에게 묻는다: 스트리머를 말로 움직일 수 있다는 걸 보여 주는 장면
+      enter: { do: ['ask:문이 두 개네? 채팅창, 어느 쪽으로 갈까?'] },
+      decor: [
+        ['proto', 'Box_A', [-4.2, 0, 3.2], 0.2],
+        ['proto', 'Box_A', [-3.7, 0, 3.4], 0.9],
+        ['proto', 'Barrel_A', [4.2, 0.4, 3.2]],
+        ['proto', 'Dummy_Base', [4, 0, -2.4], -0.9],
       ],
     },
   },
 
   objects: [
+    // ── 연습장 1: 버튼과 문 ──
     {
-      id: 'door', area: 'room', name: '문', kind: 'door', openWhen: 'doorOpen',
-      model: { pack: 'bath', name: 'door_modular' },
-      pos: [0, 0, -5], stand: [0, -3.5], look: [0, 1.3, -5],
-      desc: [['doorOpen', '정면 벽의 나무 문. 활짝 열려 있다'], '정면 벽의 커다란 나무 문. 닫혀 있다'],
+      id: 'button', area: 'room1', name: '빨간 버튼', kind: 'button', color: 0xe8453c, downWhen: 'door1Open',
+      pos: [-2.2, 0, -2.4], stand: [-2.2, -1.3], look: [-2.2, 0.85, -2.4],
+      desc: [['door1Open', '왼쪽 앞의 빨간 버튼. 눌려 있다'], '왼쪽 앞 받침대 위의 커다란 빨간 버튼'],
     },
     {
-      id: 'lever', area: 'room', name: '레버', kind: 'lever', downWhen: 'doorOpen', shinyWhen: 'oiled',
-      pos: [-4.9, 1.25, -1.5], rotY: 0, stand: [-3.8, -1.5], look: [-5, 1.3, -1.5],
-      desc: [['doorOpen', '왼쪽 벽의 금속 레버. 아래로 내려가 있다'], '왼쪽 벽에 붙은 금속 레버'],
+      id: 'door1', area: 'room1', name: '문', kind: 'door', openWhen: 'door1Open', model: DOOR,
+      pos: [0, 0, -4], stand: [0, -2.6], look: [0, 1.2, -4],
+      desc: [['door1Open', '정면 벽의 문. 활짝 열려 있다'], '정면 벽의 닫힌 문'],
     },
     {
-      id: 'oil', area: 'room', name: '빨간 통', showIf: '!oilTaken',
-      model: { pack: 'proto', name: 'Can_A', tint: 0xff4a3d },
-      pos: [-4.3, 0.8, -4.3], stand: [-3.2, -3.2], look: [-4.3, 0.9, -4.3], solid: false,
-      desc: '왼쪽 구석 작은 수납장 위의 빨간 통',
-    },
-    {
-      id: 'box', area: 'room', name: '상자', kind: 'chest', openWhen: 'boxOpened',
-      model: { pack: 'dungeon', name: 'chest_gold', scale: 0.5 }, rotY: Math.PI * 0.15,
-      pos: [2, 0, -1], stand: [2, 0.5], look: [2, 0.4, -1],
-      fx: { glow: { color: 0xffd65a, offWhen: 'boxOpened' }, sparkle: { offWhen: 'boxOpened' } },
-      desc: [['boxOpened', '뚜껑이 열린 빈 보물 상자'], '바닥에서 금빛으로 반짝반짝 빛나는 보물 상자'],
-    },
-    {
-      id: 'duck', area: 'room', name: '고무 오리',
-      model: { pack: 'bath', name: 'ducky', scale: 1.8 }, rotY: -Math.PI * 0.75,
-      pos: [4, 0, -3.6], stand: [3, -2.5], look: [4, 0.4, -3.6],
+      id: 'duck', area: 'room1', name: '고무 오리',
+      model: { pack: 'bath', name: 'ducky', scale: 1.8 }, rotY: -Math.PI * 0.7,
+      pos: [2.4, 0, -2.6], stand: [1.7, -1.5], look: [2.4, 0.4, -2.6],
       fx: { anim: 'dance' },
       desc: '오른쪽 구석에서 혼자 뒤뚱뒤뚱 춤추는 커다란 노란 고무 오리',
+    },
+    // ── 연습장 2: 아이템 ──
+    {
+      id: 'table', area: 'room2', name: '책상', model: { pack: 'proto', name: 'table_medium' }, rotY: 0.2,
+      pos: [2.4, 0, -2.2], stand: [2.2, -0.9], look: [2.4, 0.7, -2.2],
+      desc: '오른쪽의 파란 책상', poke: '평범한 책상이다. 위에 뭔가 놓여 있다',
+    },
+    {
+      id: 'key', area: 'room2', name: '열쇠', showIf: '!keyTaken',
+      model: { pack: 'dungeon', name: 'key', scale: 0.7 }, rotY: 0.6,
+      pos: [2.3, 0.66, -2.2], stand: [2.2, -0.9], look: [2.3, 0.7, -2.2], solid: false,
+      fx: { sparkle: {} },
+      desc: '오른쪽 책상 위에 놓인 작은 열쇠',
+    },
+    {
+      id: 'crate', area: 'room2', name: '나무 상자', model: { pack: 'proto', name: 'Box_B', scale: 1.6 }, rotY: -0.4,
+      pos: [-2.5, 0, -2.4], stand: [-2, -1.2], look: [-2.5, 0.4, -2.4],
+      desc: '왼쪽의 커다란 나무 상자',
+    },
+    {
+      id: 'door2', area: 'room2', name: '잠긴 문', kind: 'door', openWhen: 'door2Open', model: { pack: 'proto', name: 'Door_B' },
+      pos: [0, 0, -4], stand: [0, -2.6], look: [0, 1.2, -4],
+      desc: [['door2Open', '정면 벽의 빨간 문. 활짝 열려 있다'], '정면 벽의 빨간 문. 열쇠 구멍이 있는 자물쇠가 달려 있다'],
+    },
+    // ── 연습장 3: 갈림길 ──
+    {
+      id: 'leftDoor', area: 'room3', name: '왼쪽 문', kind: 'door', model: DOOR,
+      pos: [-2.5, 0, -4], stand: [-2.5, -2.6], look: [-2.5, 1.2, -4],
+      desc: '정면 벽 왼쪽의 문',
+    },
+    {
+      id: 'rightDoor', area: 'room3', name: '오른쪽 문', kind: 'door', model: { pack: 'proto', name: 'Door_A_Decorated' },
+      pos: [2.5, 0, -4], stand: [2.5, -2.6], look: [2.5, 1.2, -4],
+      desc: '정면 벽 오른쪽의 문. 과녁 그림이 붙어 있다',
+    },
+    {
+      id: 'sign', area: 'room3', name: '안내판', kind: 'sign',
+      label: { text: '⬅ GOAL', wall: true, y: 2.1, w: 1.7, h: 0.62, bg: '#ffe14a', color: '#1a1500', board: 0x34363d },
+      clue: '두 문 사이의 노란 안내판에 "⬅ GOAL"이 적혀 있다. AI에게는 내용을 알려 주지 않는다.',
+      pos: [0, 0, -3.95], stand: [0, -2.4], look: [0, 1.9, -4],
+      desc: '두 문 사이 벽에 붙은 노란 안내판. 글씨가 흐릿해서 잘 안 보인다',
+      poke: '안내판을 만져 봤다. 뭔가 쓰여 있는데 흐릿해서 모르겠다',
     },
   ],
 
   rules: [
-    { target: 'oil', on: ['pickup', 'interact'], do: ['set:oilTaken', 'give:oil'], say: '빨간 통을 주웠다. 기름통이다' },
-    { target: 'lever', on: 'use', item: '기름통', if: '!oiled', do: ['set:oiled', 'take:기름통'], say: '레버에 기름을 발랐다. 이제 부드럽게 움직일 것 같다' },
-    { target: 'lever', if: 'doorOpen', say: '레버는 이미 내려가 있다' },
-    { target: 'lever', if: 'oiled', do: ['set:doorOpen'], say: '레버가 철컥 내려가고, 정면의 문이 열렸다' },
-    { target: 'lever', say: '레버를 당겨 봤지만 녹슬어서 꿈쩍도 하지 않는다' },
-    { target: 'door', if: 'doorOpen', do: ['clear'], say: '열린 문으로 나갔다. 스테이지 클리어!' },
-    { target: 'door', say: '문을 밀어 봤지만 잠겨 있어 꿈쩍도 하지 않는다' },
-    { target: 'box', if: '!boxOpened', do: ['set:boxOpened', 'give:coin'], say: '상자를 열었더니 낡은 동전이 하나 들어 있었다' },
-    { target: 'box', say: '빈 상자다' },
-    { target: 'duck', say: '오리가 삑 소리를 내며 더 신나게 춤춘다. 그것뿐이다' },
+    { target: 'button', if: '!door1Open', do: ['set:door1Open'], say: '빨간 버튼을 꾹 누르자 철컥 하고 정면 문이 열렸다' },
+    { target: 'button', say: '버튼은 이미 눌려 있다' },
+    { target: 'door1', if: 'door1Open', do: ['goto:room2@start'], say: '열린 문을 지나 연습장 2로 들어왔다' },
+    { target: 'door1', say: '문이 잠겨 꿈쩍도 하지 않는다. 어딘가 여는 장치가 있을 것 같다' },
+    { target: 'duck', say: '오리가 삑! 소리를 내며 더 신나게 춤춘다. 그것뿐이다' },
+
+    { target: ['key', 'table'], on: ['pickup', 'interact'], if: '!keyTaken', do: ['set:keyTaken', 'give:key'], say: '책상 위의 열쇠를 주웠다' },
+    { target: 'door2', on: 'use', item: '열쇠', if: '!door2Open', do: ['set:door2Open', 'take:열쇠'], say: '열쇠를 꽂아 돌리자 자물쇠가 철컥 풀리며 문이 열렸다' },
+    { target: 'door2', if: 'door2Open', do: ['goto:room3@start'], say: '열린 문을 지나 연습장 3으로 들어왔다' },
+    { target: 'door2', say: '문을 밀어 봤지만 자물쇠로 잠겨 있다. 열쇠가 필요해 보인다' },
+    { target: 'crate', say: '나무 상자를 열어 봤다. 안은 텅 비어 있다' },
+
+    { target: 'leftDoor', do: ['clear'], say: '왼쪽 문을 열고 나가자 출구가 나왔다. 튜토리얼 클리어!' },
+    { target: 'rightDoor', say: '문고리를 잡으려 했는데… 벽에 그려진 그림이었다! 진짜 문이 아니다' },
   ],
 
-  // 다른 시청자: 방해꾼은 반짝이는 상자로, 조력자는 빨간 통 쪽으로
+  // 다른 시청자: 연습장 3에서 방해꾼이 처음 후원으로 끼어든다(후원 튜토리얼이 이때 뜬다). 즉흥 대사는 끈다
   viewers: {
-    troll: 1, helper: 1,
+    troll: 0, helper: 0,
     script: [
-      { role: 'troll', when: '!boxOpened', delay: 10, text: '상자 먼저 열어봐 ㅋㅋ 보물 들었을 듯' },
-      { role: 'helper', when: '!oilTaken', delay: 30, text: '빨간 통 뭔가 쓸 데 있어 보이는데' },
+      { role: 'helper', when: ['area:room1', '!door1Open'], delay: 35, text: '저 빨간 버튼 누르라고 해 봐' },
+      { role: 'troll', when: 'area:room3', delay: 10, text: '오른쪽 문 ㄱㄱ 과녁 붙은 게 출구임 ㅋㅋ', dona: 3000 },
     ],
   },
 
-  // 검증: 정답 경로와 확인하고 싶은 시나리오
+  // 플레이어 전용 튜토리얼(뜨는 동안 게임이 멈춘다)
+  tutorial: [
+    { on: '@start', cards: [
+      { art: 'role', title: '너는 이 방송의 시청자!', text: '채팅으로 훈수해서 스트리머 한별이 게임을 깨도록 도와줘.' },
+      { art: 'describe', title: '말로 가리키기', text: '한별은 물건의 이름표를 볼 수 없어. "빨간 버튼 눌러"처럼 생김새로 말해 주고, 딴짓하면 다시 불러 줘.' },
+    ] },
+    { on: '@gain', cards: [
+      { art: 'bag', title: '아이템 쓰기', text: '주운 아이템은 왼쪽 아래 가방에 들어가. "열쇠를 문에 써"처럼 아이템과 쓸 곳을 함께 말해 줘.' },
+    ] },
+    { on: '@ask', cards: [
+      { art: 'ask', title: '한별이 물어볼 때', text: '한별이 고민되면 채팅창에 물어봐. 대답해 주면 그대로 따라 줄 거야.' },
+      { art: 'clue', title: '너만 보이는 단서', text: '표지판과 그림은 너에게만 또렷하게 보여. 무엇이 쓰여 있는지 한별에게 알려 줘.' },
+    ] },
+    { on: '@dona', cards: [
+      { art: 'dona', title: '채팅과 후원', text: '채팅창이 붐비면 네 채팅이 묻힐 수 있어. 후원 지시는 ⚡를 쓰는 대신 한별이 반드시 읽어.' },
+      { art: 'troll', title: '방해하는 시청자', text: '엉뚱한 곳으로 보내는 시청자도 있어. 후원끼리 부딪치면 한별은 가장 나중에 온 후원을 따라.' },
+    ] },
+  ],
+
   solution: [
-    { type: 'pickup', target: 'oil' },
-    { type: 'use', target: 'lever', item: '기름통' },
-    { type: 'interact', target: 'lever' },
-    { type: 'interact', target: 'door' },
+    { type: 'interact', target: 'button' },
+    { type: 'move', target: 'door1' },
+    { type: 'pickup', target: 'key' },
+    { type: 'use', target: 'door2', item: '열쇠' },
+    { type: 'interact', target: 'door2' },
+    { type: 'interact', target: 'leftDoor' },
   ],
   tests: [
-    { name: '기름칠 없이 레버를 당기면 문이 안 열린다', actions: [{ type: 'interact', target: 'lever' }, { type: 'interact', target: 'door' }], expect: { flag: ['!doorOpen'], cleared: false } },
-    { name: '열린 문으로 "가기"만 해도 나간다', actions: [{ type: 'pickup', target: 'oil' }, { type: 'use', target: 'lever', item: '기름통' }, { type: 'interact', target: 'lever' }, { type: 'move', target: 'door' }], expect: { cleared: true } },
+    { name: '버튼 없이는 문이 안 열린다', actions: [{ type: 'interact', target: 'door1' }], expect: { area: 'room1' } },
+    { name: '열쇠 없이는 연습장 2 문이 안 열린다', actions: [{ type: 'interact', target: 'button' }, { type: 'interact', target: 'door1' }, { type: 'interact', target: 'door2' }], expect: { area: 'room2', flag: ['!door2Open'] } },
+    { name: '오른쪽 문은 가짜(클리어 안 됨)', actions: [{ type: 'interact', target: 'button' }, { type: 'interact', target: 'door1' }, { type: 'pickup', target: 'key' }, { type: 'use', target: 'door2', item: '열쇠' }, { type: 'interact', target: 'door2' }, { type: 'interact', target: 'rightDoor' }], expect: { cleared: false, area: 'room3' } },
   ],
 };

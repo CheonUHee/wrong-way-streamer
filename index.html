@@ -21,6 +21,7 @@
       <div class="scene" id="scene"></div>
 
       <div class="hud goal" data-zone="현재 목표"><b>🎯 목표</b> <span id="goal"></span></div>
+      <div class="hud warn" id="warn"></div>
 
       <div class="invwrap" data-zone="인벤토리">
         <div class="invhead"><span>🎒 가방</span><b id="invCount">0/9</b></div>
@@ -98,6 +99,17 @@
       <div class="hint" id="hint">채팅은 무료지만 스트리머가 놓칠 수 있어요.</div>
     </div>
   </aside>
+</div>
+
+<!-- 플레이어 전용 튜토리얼: 화면 전체를 어둡게 하고, 닫을 때까지 게임이 멈춘다 -->
+<div class="tut" id="tut" role="dialog" aria-modal="true" aria-labelledby="tutTitle">
+  <div class="tut-card">
+    <div class="tut-tag">📺 시청자 가이드 <small>한별에게는 보이지 않아요</small></div>
+    <div class="tut-art" id="tutArt"></div>
+    <h3 id="tutTitle"></h3>
+    <p id="tutText"></p>
+    <div class="tut-foot"><span id="tutPage"></span><button id="tutNext">알겠어!</button></div>
+  </div>
 </div>
 
 <dialog id="settings">

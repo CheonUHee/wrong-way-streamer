@@ -12,6 +12,7 @@ import * as THREE from 'three';
 import { $ } from './ui.js';
 import { S, model, place, ownMaterials, clips } from './assets.js';
 import { objectsIn, cond } from './core.js';
+import { isPaused } from './pause.js';
 
 const EYE = 1.45;          // 눈높이(m)
 const WALK_SPEED = 2.2;    // 걷는 속도(m/s)
@@ -49,6 +50,24 @@ const box = (w, h, d, m) => new THREE.Mesh(new THREE.BoxGeometry(w, h, d), m);
 const v3 = (x, y, z) => new THREE.Vector3(x, y, z);
 const wait = ms => new Promise(ok => setTimeout(ok, ms));
 function rng(seed) { return () => (seed = (seed * 16807) % 2147483647) / 2147483647; }
+// 오르막 구역(env.slope: 북쪽(-z)으로 1m 갈 때 올라가는 높이). 땅·소품·오브젝트·눈높이에 모두 더한다
+let slope = 0;
+const gy = z => -z * slope;
+const lift = ([x, y, z]) => [x, y + gy(z), z];
+// 격자 무늬 텍스처(프로토타입 테마): 밝은 바탕에 선, 1칸 = 1m
+const gridTex = {};
+function grid(color, line, rep = [1, 1]) {
+  const k = color + line;
+  if (!gridTex[k]) {
+    const c = document.createElement('canvas'); c.width = c.height = 128; const g = c.getContext('2d');
+    g.fillStyle = color; g.fillRect(0, 0, 128, 128);
+    g.strokeStyle = line; g.lineWidth = 4; g.strokeRect(0, 0, 128, 128);
+    g.lineWidth = 1.5; g.beginPath(); g.moveTo(64, 0); g.lineTo(64, 128); g.moveTo(0, 64); g.lineTo(128, 64); g.stroke();
+    const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace; t.wrapS = t.wrapT = THREE.RepeatWrapping; t.anisotropy = 4;
+    gridTex[k] = t;
+  }
+  const t = gridTex[k].clone(); t.repeat.set(...rep); t.needsUpdate = true; return t;
+}
 
 /* ── 환경: 방 / 야외 ──
    변(side): north(-z) south(+z) west(-x) east(+x). openings로 문·통로 자리를 비운다. */
@@ -75,7 +94,8 @@ function buildRoom(env) {
     for (let i = 0; i < n; i++) for (let j = 0; j < m; j++)
       place(envGroup, env.floor.pack, env.floor.name, { pos: [-w / 2 + tw * (i + 0.5), 0, -d / 2 + td * (j + 0.5)], scale: Math.max(tw, td) / 4 });
   }
-  const under = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat(env.floorColor || 0x7a5a44));
+  const under = new THREE.Mesh(new THREE.PlaneGeometry(w, d), env.grid && !env.floor
+    ? new THREE.MeshStandardMaterial({ map: grid('#f08a3c', '#c2662a', [w / 2, d / 2]), roughness: 0.9 }) : mat(env.floorColor || 0x7a5a44));
   under.rotation.x = -Math.PI / 2; under.position.y = env.floor ? -0.05 : 0; envGroup.add(under);
   const ceil = new THREE.Mesh(new THREE.PlaneGeometry(w, d), mat(C.ceil));
   ceil.rotation.x = Math.PI / 2; ceil.position.y = h; envGroup.add(ceil);
@@ -86,8 +106,8 @@ function buildRoom(env) {
       const len = u1 - u0, hh = y1 - y0; if (len <= 0.01 || hh <= 0.01) return;
       const g = new THREE.Group(); g.position.copy(at(side, (u0 + u1) / 2, (y0 + y1) / 2, side.fixed + Math.sign(side.fixed) * T / 2));
       if (side.along === 'z') g.rotation.y = Math.PI / 2;
-      g.add(box(len, hh, T, mat(C.wall)));
-      const lowH = Math.min(1, y1) - y0;                // 아래 1m는 징두리 + 몰딩
+      g.add(box(len, hh, T, env.grid ? new THREE.MeshStandardMaterial({ map: grid('#e4e4e8', '#b9bcc6', [len / 2, hh / 2]), roughness: 0.9 }) : mat(C.wall)));
+      const lowH = env.grid ? 0 : Math.min(1, y1) - y0;  // 아래 1m는 징두리 + 몰딩(격자 방은 없음)
       if (lowH > 0) {
         const low = box(len + 0.02, lowH, T + 0.02, mat(C.wainscot)); low.position.y = -hh / 2 + lowH / 2; g.add(low);
         const rail = box(len + 0.04, 0.06, T + 0.04, mat(C.trim)); rail.position.y = -hh / 2 + lowH; g.add(rail);
@@ -97,7 +117,7 @@ function buildRoom(env) {
     for (const [a, b] of segments(side.len, opens)) piece(a, b, 0, h);
     for (const o of opens) {
       piece(o.x - o.w / 2, o.x + o.w / 2, o.h || 2.3, h);          // 개구부 위 벽
-      const glow = new THREE.Mesh(new THREE.PlaneGeometry(o.w * 3, (o.h || 2.3) * 2), new THREE.MeshBasicMaterial({ color: 0xfff6d8 }));
+      const glow = new THREE.Mesh(new THREE.PlaneGeometry(o.w * 3, (o.h || 2.3) * 2), new THREE.MeshBasicMaterial({ color: o.glow ?? env.glowColor ?? 0xfff6d8, side: THREE.DoubleSide }));   // o.glow: 이 개구부만 다른 색(어두운 벽감 등)
       glow.position.copy(at(side, o.x, (o.h || 2.3) / 2, side.fixed + Math.sign(side.fixed) * 1.6));
       glow.rotation.y = side.along === 'z' ? Math.PI / 2 : 0; envGroup.add(glow);
     }
@@ -106,8 +126,13 @@ function buildRoom(env) {
 
 function buildOutdoor(env) {
   const { w, d } = env, r = rng(w * 131 + d * 7 + (env.ground || 0) % 997);
-  const ground = new THREE.Mesh(new THREE.PlaneGeometry(w + 40, d + 40), mat(env.ground || 0x4f6b45));
-  ground.rotation.x = -Math.PI / 2; envGroup.add(ground);
+  const ground = new THREE.Mesh(new THREE.PlaneGeometry(w + 40, (d + 40) * Math.hypot(1, slope)), mat(env.ground || 0x4f6b45));
+  ground.rotation.x = -Math.PI / 2 + Math.atan(slope); envGroup.add(ground);
+  if (env.path) {                                   // 길 한가운데 흙길(외길 표시)
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(env.path, d * Math.hypot(1, slope)), mat(env.pathColor || 0x8a7356));
+    p.rotation.x = -Math.PI / 2 + Math.atan(slope); p.position.y = 0.01; envGroup.add(p);
+  }
+  if (env.border === 'cliff') return buildCliffs(env, r);
   const inner = new THREE.Mesh(new THREE.CircleGeometry(Math.min(w, d) * 0.45, 32), mat(new THREE.Color(env.ground || 0x4f6b45).offsetHSL(0, -0.05, 0.04)));
   inner.rotation.x = -Math.PI / 2; inner.position.y = 0.005; envGroup.add(inner);
   // 경계 울타리(통로 자리는 비운다)
@@ -118,6 +143,10 @@ function buildOutdoor(env) {
       const n = Math.max(1, Math.round((b - a) / seg)), sc = (b - a) / n / 4;
       for (let i = 0; i < n; i++) {
         const u = a + (b - a) * (i + 0.5) / n;
+        if (env.border === 'bush') {               // 숲: 덤불 울타리
+          place(envGroup, 'forest', ['Bush_1_C_Color1', 'Bush_3_A_Color1', 'Bush_1_A_Color1'][i % 3], { pos: at(side, u, 0, side.fixed).toArray(), rotY: r() * 6.28, scale: 2.6 + r() * 0.8 });
+          continue;
+        }
         place(envGroup, 'halloween', env.border === 'fence' && r() < 0.15 ? 'fence_broken' : 'fence',
           { pos: at(side, u, 0, side.fixed).toArray(), rotY: side.rotY, scale: sc });
       }
@@ -125,8 +154,28 @@ function buildOutdoor(env) {
     // 울타리 밖 나무(배경)
     for (let u = -side.len / 2 - 2; u <= side.len / 2 + 2; u += 2.6 + r() * 1.5) {
       const off = 1.6 + r() * 2.5;
-      const tree = env.dim ? ['halloween', r() < 0.5 ? 'tree_dead_large' : 'tree_dead_medium'] : ['forest', r() < 0.5 ? 'Tree_1_A_Color1' : 'Tree_2_A_Color1'];
+      const tree = env.dim ? ['halloween', r() < 0.5 ? 'tree_dead_large' : 'tree_dead_medium'] : ['forest', ['Tree_1_A_Color1', 'Tree_2_A_Color1', 'Tree_4_A_Color1', 'Tree_3_A_Color1'][Math.floor(r() * 4)]];
       place(envGroup, tree[0], tree[1], { pos: at(side, u, 0, side.fixed + Math.sign(side.fixed) * off).toArray(), rotY: r() * 6.28, scale: S * (0.8 + r() * 0.5) });
+    }
+  }
+}
+
+// 골짜기 절벽: 동·서 변에 큰 바위를 촘촘히 쌓는다. openings 자리는 비우고 그 뒤에 바위를 둬서 '틈새'(숨을 곳)를 만든다
+function buildCliffs(env, r) {
+  const { w, d } = env, low = ['Rock_1_J_Color1', 'Rock_1_K_Color1', 'Rock_1_L_Color1', 'Rock_1_M_Color1'], high = ['Rock_1_N_Color1', 'Rock_1_O_Color1', 'Rock_1_P_Color1', 'Rock_1_Q_Color1'];
+  const pk = a => a[Math.floor(r() * a.length)];
+  for (const name of ['west', 'east']) {
+    const side = SIDES[name](w, d), sg = Math.sign(side.fixed);
+    for (const [a, b] of segments(side.len + 8, env.openings?.[name])) {      // 길 양끝 너머까지 이어 붙인다
+      for (let u = a + 1.1; u < b - 0.6; u += 2.2) {
+        place(envGroup, 'forest', pk(low), { pos: lift(at(side, u, -0.2, side.fixed + sg * (0.9 + r() * 0.4)).toArray()), rotY: r() * 6.28, scale: 1 + r() * 0.3 });
+        place(envGroup, 'forest', pk(high), { pos: lift(at(side, u + 1.1, 0, side.fixed + sg * (2.6 + r())).toArray()), rotY: r() * 6.28, scale: 1.2 + r() * 0.4 });
+      }
+    }
+    for (const o of env.openings?.[name] || []) {      // 틈새: 벽에 난 구멍 + 안쪽을 막는 바위 + 그늘
+      place(envGroup, 'forest', pk(low), { pos: lift(at(side, o.x, -0.2, side.fixed + sg * (o.depth || 3.2)).toArray()), rotY: r() * 6.28, scale: 1.1 });
+      const shade = new THREE.Mesh(new THREE.CircleGeometry(1.1, 20), mat(0x2b3324)); shade.rotation.x = -Math.PI / 2;
+      shade.position.set(...lift(at(side, o.x, 0.03, side.fixed + sg * 0.6).toArray())); envGroup.add(shade);
     }
   }
 }
@@ -137,6 +186,11 @@ function setLighting(env) {
     scene.fog = new THREE.Fog(env.sky || 0x1d1b33, 10, 30);
     hemi.color.set(0xc4ccff); hemi.groundColor.set(0x2e3a26); hemi.intensity = env.dim ? 0.9 : 1.5;
     sun.color.set(0xcfd8ff); sun.intensity = env.dim ? 0.5 : 1.0; sun.position.set(-4, 8, 3);
+    if (env.day) {                                  // 낮(숲): 따뜻한 햇빛, 안개는 멀리
+      hemi.color.set(0xfff6e0); hemi.groundColor.set(0x4a5a34); hemi.intensity = 2.0;
+      sun.color.set(0xfff0d0); sun.intensity = 2.2; sun.position.set(-5, 10, 4);
+      scene.fog = new THREE.Fog(env.sky, 18, 45);
+    }
     lamp.intensity = 0;
   } else {
     scene.background = new THREE.Color(0x2a2433); scene.fog = null;
@@ -150,12 +204,16 @@ function setLighting(env) {
    spec.kind: door(문틀+경첩) · gate(양쪽 문짝) · lever(코드로 만든 레버) · chest(뚜껑) · sign(표지판+그림) · 생략(모델 하나)
    spec.fx: { glow: {color, intensity, offWhen}, sparkle: {offWhen}, anim: 'dance'|'bob'|'spin' } */
 const OBJ = {};
-function labelPlane(text, color = '#2a1a12', w = 0.8, h = 0.48) {
-  const c = document.createElement('canvas'); c.width = 256; c.height = 154;
+function labelPlane(text, color = '#2a1a12', w = 0.8, h = 0.48, bg = '#d9b98a') {
+  const c = document.createElement('canvas'); c.width = 512; c.height = Math.round(512 * h / w);
   const g = c.getContext('2d');
-  g.fillStyle = '#d9b98a'; g.fillRect(0, 0, 256, 154);
-  g.fillStyle = color; g.font = 'bold 96px sans-serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText(text, 128, 82);
+  g.fillStyle = bg; g.fillRect(0, 0, c.width, c.height);
+  g.fillStyle = color; g.textAlign = 'center'; g.textBaseline = 'middle';
+  // 글자 수에 맞춰 크기를 줄인다(그림 문자 여러 개를 화살표로 잇는 단서도 들어가게)
+  let fs = c.height * 0.66;
+  g.font = `900 ${fs}px "Segoe UI Emoji", "Apple Color Emoji", sans-serif`;
+  while (g.measureText(text).width > c.width * 0.92 && fs > 10) { fs *= 0.9; g.font = `900 ${fs}px "Segoe UI Emoji", "Apple Color Emoji", sans-serif`; }
+  g.fillText(text, c.width / 2, c.height * 0.54);
   const t = new THREE.CanvasTexture(c); t.colorSpace = THREE.SRGBColorSpace;
   return new THREE.Mesh(new THREE.PlaneGeometry(w, h), new THREE.MeshStandardMaterial({ map: t, roughness: 0.9 }));
 }
@@ -187,10 +245,25 @@ function buildObject(o) {
     const arm = new THREE.Mesh(new THREE.CylinderGeometry(0.03, 0.03, 0.44, 10), e.armMat); arm.position.y = 0.22; e.pivot.add(arm);
     const grip = new THREE.Mesh(new THREE.SphereGeometry(0.07, 16, 12), mat(0xff6f6f)); grip.position.y = 0.46; e.pivot.add(grip);
   } else if (o.kind === 'sign') {
-    const wood = mat(0x8a5a3c);
-    const post = box(0.1, 1.5, 0.1, wood); post.position.y = 0.75; root.add(post);
-    const board = box(0.9, 0.56, 0.06, wood); board.position.y = 1.38; root.add(board);
-    if (o.label) { const p = labelPlane(o.label.text, o.label.color); p.position.set(0, 1.38, 0.035); root.add(p); }
+    // 표지판·석판. label.showIf가 있으면 그 조건 전에는 이끼(흙)로 덮여 그림이 안 보인다
+    const L = o.label || {}, bw = L.w || 0.9, bh = L.h || 0.56, py = L.y || 1.38;
+    const wood = mat(L.board ?? 0x8a5a3c);
+    if (!L.wall) { const post = box(0.1, py, 0.1, wood); post.position.set(0, py / 2, -0.09); root.add(post); }   // 기둥은 판 뒤에
+    const board = box(bw + 0.08, bh + 0.08, 0.06, wood); board.position.y = py; root.add(board);
+    if (o.label) {
+      e.label = labelPlane(L.text, L.color, bw, bh, L.bg); e.label.position.set(0, py, 0.035); root.add(e.label);
+      if (L.showIf) {
+        e.cover = new THREE.Mesh(new THREE.PlaneGeometry(bw, bh), mat(L.coverColor ?? 0x4d6b2f, { roughness: 1 }));
+        e.cover.position.set(0, py, 0.04); root.add(e.cover);
+      }
+    }
+  } else if (o.kind === 'button') {
+    // 돌 받침 위의 둥근 버튼. downWhen 조건이면 눌려 들어간다
+    const base = box(0.5, 0.8, 0.5, mat(o.baseColor ?? 0x9a9a92, { roughness: 1 })); base.position.y = 0.4; root.add(base);
+    e.cap = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.18, 0.12, 24), mat(o.color ?? 0xd8433a, { roughness: 0.5 }));
+    e.cap.position.y = 0.86; root.add(e.cap);
+  } else if (o.kind === 'spot') {
+    // 보이지 않는 자리(틈새 같은 곳). 모습은 구역의 지형·소품이 만든다
   } else {
     loadModel(root).then(mod => {
       afterLoad(mod);
@@ -206,7 +279,7 @@ function buildObject(o) {
     for (let i = 0; i < 6; i++) { const s = new THREE.Mesh(new THREE.OctahedronGeometry(0.035), spMat); s.userData.phase = i; e.sparkles.add(s); }
   }
   e.body = root;
-  root.position.set(...o.pos); root.rotation.y = o.rotY || 0;
+  root.position.set(...lift(o.pos)); root.rotation.y = o.rotY || 0;
   objGroup.add(root);
   return e;
 }
@@ -237,7 +310,9 @@ let foe = null, falling = null, shake = 0;
    지나가다 반짝이거나 움직이는 물건이 가까우면 고개를 돌린다(시선 뺏기). */
 let spots = [], autonomy = true, wanderAt = 0, lastNoticeCheck = 0;
 const noticedAt = {};
-const hooks = { notice: () => {}, wander: () => {} };
+const hooks = { notice: () => {}, wander: () => {}, hazard: () => {} };
+export const onHazard = fn => { hooks.hazard = fn; };   // 주기 위험(굴러오는 바위)에 맞았다
+export const interrupt = () => { finishWalk(); finishAct(); };
 export const onNotice = fn => { hooks.notice = fn; };   // 시선을 뺏긴 오브젝트 id를 알려 준다
 export const onWander = fn => { hooks.wander = fn; };   // 오브젝트 앞을 떠나 돌아다니기 시작했다
 export const setAutonomy = on => { autonomy = on; };
@@ -251,23 +326,72 @@ function finishWalk() { if (walk) { const d = walk.done; walk = null; d(); } }
 function finishAct() { if (anim) { const d = anim.done; anim = null; d(); } }
 
 export function loadArea(stage, s, areaId, entryId) {
-  finishWalk(); finishAct(); glance = null; foe = null; falling = null; shake = 0;
+  finishWalk(); finishAct(); glance = null; foe = null; shake = 0;
+  if (falling?.done) falling.done();                    // 쓰러지는 연출을 기다리는 쪽이 멈추지 않게 끝내 준다
+  falling = null;
   for (const g of [envGroup, objGroup, enemyGroup]) g.clear();
   mixers.length = 0;
   for (const k in OBJ) delete OBJ[k];
   const area = stage.areas[areaId];
+  slope = area.env.slope || 0; curArea = area;
+  setHazard(area.hazard);
   setLighting(area.env);
   (area.env.kind === 'outdoor' ? buildOutdoor : buildRoom)(area.env);
-  for (const [p, n, pos, rotY = 0, scale = S] of area.decor || []) place(envGroup, p, n, { pos, rotY, scale });
+  for (const [p, n, pos, rotY = 0, scale = S] of area.decor || []) place(envGroup, p, n, { pos: lift(pos), rotY, scale });
   for (const o of stage.objects.filter(o => o.area === areaId)) OBJ[o.id] = buildObject(o);
   const ent = area.entries[entryId] || Object.values(area.entries)[0];
   camera.position.set(ent.pos[0], EYE, ent.pos[1]);
-  focus.set(...ent.look);
+  focus.set(...lift(ent.look));
+  camera.position.y = EYE + gy(camera.position.z);
   tmp.position.copy(camera.position); tmp.lookAt(focus); camera.quaternion.copy(tmp.quaternion);
   arms.r.visible = arms.l.visible = true;
   render(stage, s); resize();
   spots = wanderSpots(area, stage.objects.filter(o => o.area === areaId));
-  wanderAt = nextWander(clock.elapsedTime); autonomy = true;
+  wanderAt = nextWander(simT); autonomy = true;
+}
+let curArea = null;
+
+/* ── 주기 위험: 굴러오는 바위 ──
+   area.hazard = { model, from, to, x, lane, radius, speed, period, warn, delay, reason, warnText }
+   warn초 동안 경고(쿠르르릉) → 바위가 from(z)에서 to(z)로 굴러 내려온다 → 남은 시간은 잠잠.
+   굴러가는 바위가 카메라 근처를 지날 때 카메라가 길(lane) 안에 있으면 맞는다. 틈새(길 밖)는 안전하다. */
+let hz = null;
+function setHazard(spec) {
+  $('warn').classList.remove('show');
+  hz = spec ? { spec, t: -(spec.delay ?? 5), phase: 'calm', hit: false, mesh: null } : null;
+  if (!hz) return;
+  // 모델을 그룹으로 감싸 그룹을 굴린다. lie: 세워진 모델(통)을 옆으로 눕혀 굴린다(원점이 바닥인 모델은 halfLen만큼 옮겨 가운데를 맞춘다)
+  const g = new THREE.Group(); g.visible = false; envGroup.add(g); hz.mesh = g;
+  const sc = spec.model.scale ?? 2.4;
+  place(g, spec.model.pack, spec.model.name, { scale: sc }).then(m => {
+    if (!m || !spec.model.lie) return;
+    m.rotation.z = Math.PI / 2; m.position.x = (spec.model.halfLen ?? 1) * sc;
+  });
+}
+export const hazardStatus = () => hz?.phase || null;
+function stepHazard(dt) {
+  if (!hz) return;
+  const H = hz.spec, roll = Math.abs(H.to - H.from) / (H.speed || 8), warn = H.warn ?? 2.5;
+  if (!autonomy || falling) { $('warn').classList.remove('show'); if (hz.mesh) hz.mesh.visible = false; return; }
+  hz.t += dt;
+  if (hz.t >= H.period) { hz.t -= H.period; hz.hit = false; }
+  const phase = hz.t < 0 ? 'calm' : hz.t < warn ? 'warn' : hz.t < warn + roll ? 'roll' : 'calm';
+  hz.phase = phase;
+  $('warn').textContent = H.warnText || '⚠ 쿠르르릉… 위에서 뭔가 굴러온다!';
+  $('warn').classList.toggle('show', phase === 'warn' || phase === 'roll');
+  if (phase === 'warn') shake = Math.max(shake, 0.06);
+  if (!hz.mesh) return;
+  hz.mesh.visible = phase === 'roll';
+  if (phase !== 'roll') return;
+  const p = (hz.t - warn) / roll, z = H.from + (H.to - H.from) * p, r = H.radius || 1;
+  hz.mesh.position.set(H.x || 0, gy(z) + (H.lift ?? 0), z);
+  hz.mesh.rotation.x -= ((H.speed || 8) * dt) / r * Math.sign(H.to - H.from);
+  const c = camera.position;
+  if (!hz.hit && Math.abs(z - c.z) < r + 0.3 && Math.abs(c.x - (H.x || 0)) < (H.lane || 3) / 2) {
+    hz.hit = true; shake = 0.6;
+    $('hit').classList.add('on'); setTimeout(() => $('hit').classList.remove('on'), 450);
+    hooks.hazard(H.reason || '굴러온 바위에 부딪혀 쓰러졌다');
+  }
 }
 
 // 배회 지점: 배경 소품 앞(소품을 구경)과 구역의 네 귀퉁이 쪽(벽·울타리를 구경). 물건과 겹치는 곳은 뺀다.
@@ -289,7 +413,7 @@ export function explore() {
   const far = spots.filter(p => Math.hypot(p.pos[0] - here.x, p.pos[1] - here.z) > 2);
   const p = (far.length ? far : spots)[Math.floor(Math.random() * (far.length || spots.length))];
   finishWalk(); glance = null;
-  focus.set(...p.look);
+  focus.set(...lift(p.look));
   hooks.wander();
   return new Promise(done => { walk = { path: planPath(here.clone(), v3(p.pos[0], EYE, p.pos[1]), null), wait: 0.2, done }; });
 }
@@ -302,6 +426,7 @@ export function render(stage, s) {
     const o = e.spec, on = c => !!c && cond(s, c);
     e.root.visible = ids.has(o.id);
     e.target = on(o.openWhen) || on(o.downWhen) ? 1 : 0;
+    e.sunk = on(o.sinkWhen); e.revealed = !o.label?.showIf || on(o.label.showIf);
     if (e.armMat) { const shiny = on(o.shinyWhen); e.armMat.color.set(shiny ? 0xd5dbe6 : 0x9a6a48); e.armMat.metalness = shiny ? 0.9 : 0.3; }
     e.fxOff = { glow: on(o.fx?.glow?.offWhen), sparkle: on(o.fx?.sparkle?.offWhen) };
   }
@@ -328,7 +453,7 @@ function planPath(from, to, targetId) {
 }
 export function moveTo(o) {
   finishWalk(); glance = null;
-  focus.set(...o.look);
+  focus.set(...lift(o.look));
   return new Promise(done => {
     walk = { path: planPath(camera.position.clone(), v3(o.stand[0], EYE, o.stand[1]), o.id), wait: 0.35, done, target: o.id };
   });
@@ -352,7 +477,7 @@ export async function enemy(spec, objSpec) {
   const [m, C] = await Promise.all([model(spec.model.pack, spec.model.name, spec.model.scale ?? S), clips()]);
   const root = new THREE.Group(); root.add(m); enemyGroup.add(root);
   const [sx, sz] = spec.spawn || [objSpec.pos[0] + 1.2, objSpec.pos[2]];
-  root.position.set(sx, 0, sz);
+  root.position.set(sx, gy(sz), sz);
   root.lookAt(camera.position.x, 0, camera.position.z);
   const mixer = new THREE.AnimationMixer(m); mixers.push(mixer);
   const play = (name, once) => {
@@ -376,15 +501,18 @@ export function fall() {
 
 /* ── 매 프레임 ── */
 const clock = new THREE.Clock();
+let simT = 0;                       // 일시정지를 뺀 게임 시간(초)
 let bob = 0;
 const rollQ = new THREE.Quaternion(), Z = v3(0, 0, 1);
 let lastStep = 0;
 function frame() { step(0.05); requestAnimationFrame(frame); }
 // 화면이 가려져 requestAnimationFrame이 멈춰도 걷기·연출이 끝나도록 타이머로 대신 진행한다
-setInterval(() => { if (performance.now() - lastStep > 250) step(0.3); }, 200);
+setInterval(() => { if (performance.now() - lastStep > 150) step(0.5); }, 100);   // 실제 시간과 같은 속도로
 function step(maxDt) {
   lastStep = performance.now();
-  const dt = Math.min(clock.getDelta(), maxDt), t = clock.elapsedTime;
+  const rawDt = clock.getDelta();
+  if (isPaused()) { renderer.render(scene, camera); return; }   // 튜토리얼 창: 시간이 흐르지 않는다
+  const dt = Math.min(rawDt, maxDt); simT += dt; const t = simT;
   mixers.forEach(m => m.update(dt));
 
   // 걷기
@@ -401,7 +529,7 @@ function step(maxDt) {
     }
   }
   bob += dt * (walking ? 9 : 0);
-  let eyeY = EYE + (walking ? Math.abs(Math.sin(bob)) * 0.04 : 0);
+  let eyeY = EYE + gy(camera.position.z) + (walking ? Math.abs(Math.sin(bob)) * 0.04 : 0);
 
   // 적: 카메라 쪽으로 달려온다
   if (foe?.run) {
@@ -415,13 +543,13 @@ function step(maxDt) {
   if (walking || anim || foe || falling) idleSince = t;
   if (!glance && !walk && !anim && !foe && !falling && t - idleSince > nextGlance && objectsNow.length > 1) {
     const o = objectsNow[Math.floor(Math.random() * objectsNow.length)];
-    glance = { at: v3(...o.look), until: t + 1.3 };
+    glance = { at: v3(...lift(o.look)), until: t + 1.3 };
     nextGlance = 4 + Math.random() * 4; idleSince = t;
   }
   if (glance && t > glance.until) glance = null;
 
   // 자율 배회: AI가 시킨 일 없이 한동안 서 있으면 구역 안을 돌아다닌다
-  const free = autonomy && !walk && !anim && !foe && !falling;
+  const free = autonomy && curArea?.wander !== false && !walk && !anim && !foe && !falling;
   if (!free) wanderAt = Math.max(wanderAt, nextWander(t));   // 시킨 일을 마친 뒤에도 한동안은 그 자리에 머문다
   else if (t > wanderAt) { explore(); wanderAt = nextWander(t); }
   // 시선 뺏기: 가까이 있는 눈길 끄는 물건(빛·반짝임·움직임)에 고개를 홱 돌린다. 걷는 중에도 일어난다
@@ -429,8 +557,10 @@ function step(maxDt) {
     lastNoticeCheck = t;
     const near = objectsNow.find(o => catchy(o) && o.id !== walk?.target && (t - (noticedAt[o.id] ?? -99)) > NOTICE_COOLDOWN
       && Math.hypot(o.pos[0] - camera.position.x, o.pos[2] - camera.position.z) < NOTICE_RANGE);
-    if (near) { noticedAt[near.id] = t; glance = { at: v3(...near.look), until: t + 1.6 }; hooks.notice(near.id); }
+    if (near) { noticedAt[near.id] = t; glance = { at: v3(...lift(near.look)), until: t + 1.6 }; hooks.notice(near.id); }
   }
+
+  stepHazard(dt);
 
   // 시선
   const target = foe ? v3(foe.root.position.x, 1.2, foe.root.position.z) : glance ? glance.at : focus;
@@ -439,7 +569,7 @@ function step(maxDt) {
   if (falling) {
     falling.t += dt;
     const p = Math.min(falling.t / 0.9, 1), e = p * p;
-    eyeY = THREE.MathUtils.lerp(EYE, 0.35, e);
+    eyeY = THREE.MathUtils.lerp(EYE, 0.35, e) + gy(camera.position.z);
     lookQ.multiply(rollQ.setFromAxisAngle(Z, 1.2 * e));
     if (p >= 1 && falling.done) { const d = falling.done; falling.done = null; d(); }
   }
@@ -475,6 +605,9 @@ function step(maxDt) {
     if (e.pivot) e.pivot.rotation.z = -0.35 - 2.3 * e.open;
     if (e.lid) e.lid.rotation.x = -1.7 * e.open;
     if (e.leaves) e.leaves.forEach(l => { l.rotation.y = (/_left$/.test(l.name) ? 1 : -1) * 1.4 * e.open; });
+    if (e.cap) e.cap.position.y = 0.86 - 0.08 * e.open;
+    if (o.sinkWhen) { e.sink = ease(e.sink || 0, e.sunk ? 1 : 0, 1.2); e.root.position.y = lift(o.pos)[1] - (o.sinkDepth || 3) * e.sink; }
+    if (e.cover) e.cover.visible = !e.revealed;
     const glowOn = e.fxOff ? !e.fxOff.glow && !(o.kind === 'chest' && e.open > 0.5) : true;
     if (e.glow) e.glow.intensity = glowOn ? (o.fx.glow.intensity ?? 3) * (0.8 + Math.sin(t * 4) * 0.35) : 0;
     for (const m of e.mats) m.emissiveIntensity = glowOn ? 0.6 + Math.sin(t * 4) * 0.35 : 0;
@@ -495,3 +628,5 @@ function step(maxDt) {
 }
 resize();
 requestAnimationFrame(frame);
+// 개발용: 주소에 ?shot 이 있으면 지금 화면을 JPEG 데이터로 돌려주는 함수를 연다(화면 검증 자동화)
+if (new URLSearchParams(location.search).has('shot')) window.__shot = () => { renderer.render(scene, camera); return renderer.domElement.toDataURL('image/jpeg', 0.85); };

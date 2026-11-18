@@ -10,7 +10,7 @@ export const ACTION_TYPES = ['move', 'interact', 'pickup', 'use', 'explore', 'id
 export function createState(stage) {
   const s = {
     stageId: stage.id, area: stage.start.area, entry: stage.start.entry,
-    flags: { ...(stage.flags || {}) }, inv: [], at: null, near: null, noticed: null, seen: [],
+    flags: { ...(stage.flags || {}) }, inv: [], at: null, near: null, noticed: null, asking: null, seen: [], visited: [stage.start.area],
     cleared: false, dead: false, deaths: [], checkpoint: null,
     last: '방송을 막 시작했다', history: [],
   };
@@ -22,7 +22,7 @@ function saveCheckpoint(s) { s.checkpoint = { area: s.area, entry: s.entry, flag
 // 죽은 뒤 체크포인트(마지막으로 들어온 안전한 구역의 입구)로 되돌린다. 죽은 기억(deaths, history)은 남긴다.
 export function respawn(stage, s) {
   const c = s.checkpoint;
-  Object.assign(s, { area: c.area, entry: c.entry, flags: { ...c.flags }, inv: [...c.inv], at: null, near: null, noticed: null, dead: false });
+  Object.assign(s, { area: c.area, entry: c.entry, flags: { ...c.flags }, inv: [...c.inv], at: null, near: null, noticed: null, asking: null, dead: false });
   s.last = `쓰러졌다가 ${areaName(stage, s.area)}에서 다시 일어났다`;
 }
 
@@ -118,7 +118,14 @@ export function perform(stage, s, a) {
   }
 
   if (a.type !== 'move') effects.push({ type: 'act', kind: a.type, obj: o.id });
-  for (const d of [].concat(r.do || [])) {
+  applyDo(stage, s, r.do, effects, o);
+  effects.push({ type: 'render' });
+  return { result: r.say || `${o.name}에 무언가 했다`, effects };
+}
+
+// 규칙의 do 목록을 실행한다(구역에 처음 들어갈 때의 enter.do도 같은 함수를 쓴다)
+function applyDo(stage, s, list, effects, o) {
+  for (const d of [].concat(list || [])) {
     const [cmd, arg = ''] = d.split(/:(.*)/s);
     if (cmd === 'set') s.flags[arg] = true;
     else if (cmd === 'unset') s.flags[arg] = false;
@@ -129,13 +136,21 @@ export function perform(stage, s, a) {
       s.area = area; s.entry = entry; s.at = null; s.near = null; s.noticed = null;
       if (stage.areas[area]?.checkpoint !== false) saveCheckpoint(s);   // 위험 구역은 체크포인트로 삼지 않는다
       effects.push({ type: 'goto', area, entry });
+      if (!s.visited.includes(area)) { s.visited.push(area); applyDo(stage, s, stage.areas[area]?.enter?.do, effects, o); }
     }
-    else if (cmd === 'enemy') effects.push({ type: 'enemy', enemy: arg, obj: o.id });
-    else if (cmd === 'die') { s.dead = true; s.deaths.push({ area: s.area, obj: o.name, reason: arg }); effects.push({ type: 'die', reason: arg }); }
+    else if (cmd === 'enemy') effects.push({ type: 'enemy', enemy: arg, obj: o?.id });
+    else if (cmd === 'die') { s.dead = true; s.deaths.push({ area: s.area, obj: o?.name || '', reason: arg }); effects.push({ type: 'die', reason: arg }); }
     else if (cmd === 'clear') { s.cleared = true; effects.push({ type: 'clear' }); }
+    // ask: 한별이 시청자에게 묻고, 대답이 올 때까지 스스로 움직이지 않는다
+    // checkpoint: 지금까지 한 일(플래그·아이템)을 저장한다. 죽으면 이 구역 입구에서, 이 상태로 다시 시작
+    else if (cmd === 'checkpoint') saveCheckpoint(s);
+    else if (cmd === 'ask') { s.asking = arg; effects.push({ type: 'ask', text: arg }); }
   }
-  effects.push({ type: 'render' });
-  return { result: r.say || `${o.name}에 무언가 했다`, effects };
+}
+
+// 규칙 밖에서 일어난 죽음(굴러온 바위 같은 실시간 위험)
+export function kill(stage, s, reason, what = '') {
+  s.dead = true; s.at = null; s.deaths.push({ area: s.area, obj: what, reason });
 }
 
 /* ── AI에게 줄 상황 정보 ── */
@@ -146,6 +161,8 @@ export function promptContext(stage, s) {
   return {
     goal: stage.goal,
     location: `${areaName(stage, s.area)} · ${at}`,
+    note: [stage.aiNote, stage.areas[s.area]?.aiNote].filter(Boolean).join(' '),
+    asking: s.asking || '',
     objects: objs.join('\n'),
     inventory: s.inv.join(', ') || '비어 있음',
     last: s.last,

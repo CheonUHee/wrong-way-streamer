@@ -11,6 +11,8 @@
    } */
 import { addLine, donate, esc, pick } from './ui.js';
 import { all, objectsIn } from './core.js';
+import { isPaused } from './pause.js';
+import * as tutorial from './tutorial.js';
 
 export const ROLES = {
   troll:  { nicks: ['훈수빌런', '방해꾼999', 'ㅋㅋ장인', '반대로가'], color: '#ff7ab8' },
@@ -21,7 +23,8 @@ const COUNTER = [0, 0.25, 0.45, 0.65];                             // 플레이�
 const DONA_RATE = [0, 0.1, 0.3, 0.5];                              // 방해꾼이 채팅 대신 후원으로 말할 확률
 
 let stage, getState, enqueue, fired = new Set(), armed = {}, nextTroll = 0, nextHelper = 0, lastCounter = -99;
-const now = () => performance.now() / 1000;
+let clockT = 0; setInterval(() => { if (!isPaused()) clockT += 0.25; }, 250);
+const now = () => clockT;   // 일시정지를 뺀 시간(초)
 const lv = role => stage?.viewers?.[role] ?? 1;
 
 // main.js가 연결한다: 스트리머 대기열에 넣는 함수
@@ -34,9 +37,19 @@ export function reset(st, stateFn) {
 }
 
 // 한 명의 시청자가 말한다(채팅 또는 후원). 스트리머에게도 전달된다.
+// 개발용: 주소에 ?viewers=off 를 붙이면 방해꾼·조력자가 말하지 않는다(자동 테스트에서 행동이 끼어들지 않게)
+const OFF = new URLSearchParams(location.search).get('viewers') === 'off';
+// 방해꾼 후원 사이 최소 간격(초). 후원이 몰려 플레이어가 ⚡로 맞설 틈도 없이 밀리는 것을 막는다
+const TROLL_DONA_GAP = 15;
+let lastTrollDona = -99;
 export function speak(role, text, amount = 0) {
+  if (OFF) return;
+  if (role === 'troll' && amount) {
+    if (now() - lastTrollDona < TROLL_DONA_GAP) amount = 0;      // 간격이 안 됐으면 채팅으로 낮춘다
+    else lastTrollDona = now();
+  }
   const nick = pick(ROLES[role].nicks);
-  if (amount) donate(nick, amount, text);
+  if (amount) { donate(nick, amount, text); setTimeout(() => tutorial.check('@dona'), 1800); }
   else addLine(`<span class="nick" style="color:${ROLES[role].color}">${esc(nick)}</span>${esc(text)}`);
   enqueue?.({ kind: amount ? 'dona' : 'chat', text, nick, role, amount });
 }
@@ -72,15 +85,17 @@ export function onPlayerMessage(m) {
   const t = now();
   if (t - lastCounter > 20 && Math.random() < COUNTER[lv('troll')]) {
     lastCounter = t;
+    // 플레이어 후원에는 후원으로 받아치되, 플레이어 지시가 먼저 실행된 뒤에 온다(가장 나중 후원이 이기므로 바로 오면 불공평)
     const dona = m.kind === 'dona' || Math.random() < DONA_RATE[lv('troll')];
-    setTimeout(() => ok() && speak('troll', pick(TROLL_COUNTER), dona ? pick([1000, 3000, 5000]) : 0), 1500 + Math.random() * 2500);
+    const delay = dona ? 6000 + Math.random() * 3000 : 1500 + Math.random() * 2500;
+    setTimeout(() => ok() && speak('troll', pick(TROLL_COUNTER), dona ? pick([1000, 3000, 5000]) : 0), delay);
   } else if (Math.random() < 0.2 * lv('helper')) {
     setTimeout(() => ok() && speak('helper', pick(HELPER_AGREE)), 1200 + Math.random() * 2000);
   }
 }
 
 setInterval(() => {
-  if (!stage || !ok() || document.hidden) return;
+  if (!stage || !ok() || document.hidden || isPaused()) return;
   const s = getState(), t = now();
   // 상황 대본
   (stage.viewers?.script || []).forEach((v, i) => {

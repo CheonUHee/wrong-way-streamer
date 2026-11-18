@@ -229,3 +229,28 @@ dialog .btns .primary { background: var(--accent); color: var(--accent-ink); bor
   .main > * { max-width: none; }
   .chat { height: 60vh; border-left: 0; border-top: 1px solid var(--line); }
 }
+
+/* ── 플레이어 전용 튜토리얼 ── */
+.tut { position: fixed; inset: 0; z-index: 50; display: none; place-items: center; background: #05060acc; backdrop-filter: blur(3px); }
+.tut.show { display: grid; animation: tutIn .25s ease; }
+@keyframes tutIn { from { opacity: 0; } }
+.tut-card {
+  width: min(460px, 92vw); background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 18px 20px 16px;
+  box-shadow: 0 20px 60px #000a; animation: tutPop .3s cubic-bezier(.2,1.4,.4,1);
+}
+@keyframes tutPop { from { transform: translateY(16px) scale(.96); } }
+.tut-tag { font-size: 12px; font-weight: 800; color: var(--accent); }
+.tut-tag small { color: var(--dim); font-weight: 500; margin-left: 6px; }
+.tut-art { margin: 10px 0 12px; background: var(--bg); border-radius: 10px; aspect-ratio: 16 / 9; overflow: hidden; }
+.tut-art svg { display: block; width: 100%; height: 100%; }
+.tut h3 { margin: 0 0 4px; font-size: 17px; }
+.tut p { margin: 0; color: #cfd3de; font-size: 14px; line-height: 1.55; word-break: keep-all; }
+.tut-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
+.tut-foot span { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.tut-foot button { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 8px 18px; font-weight: 800; }
+/* 일시정지 중에는 입력을 막는다 */
+body.paused .composer { pointer-events: none; opacity: .5; }
+
+/* 위험 경고(플레이어만 보는 HUD): 돌 굴러오는 소리 등 */
+.hud.warn { left: 50%; top: 13%; transform: translateX(-50%); font-weight: 900; font-size: 1.8cqw; color: #ffd0d0; background: #5a0d0dcc; display: none; }
+.hud.warn.show { display: block; animation: shake .3s infinite; }

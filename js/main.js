@@ -1,7 +1,8 @@
 /* 진입점: 턴 진행(AI 호출 타이밍), 플레이어 입력, 프로토타입 컨트롤 */
 import { $, esc, addLine, viewerLine, say, donate, setFace, drawBubble, chatNoise, markRead } from './ui.js';
 import * as viewers from './viewers.js';
-import { state, isBusy, perform, startFromUrl, restartStage } from './stage.js';
+import { isPaused, whenResumed, onResume } from './pause.js';
+import { state, isBusy, canInterrupt, perform, startFromUrl, restartStage, hazardNow } from './stage.js';
 import { EMOS, SYSTEM, aiOn, buildPrompt, callGemini, mockBrain, setOnConfigChange } from './ai.js';
 
 function applyTurn(out, msgs) {
@@ -9,9 +10,11 @@ function applyTurn(out, msgs) {
   const a = out.action && typeof out.action === 'object' ? out.action : {};
   const line = String(out.line || '...').slice(0, 80);
   say(line, emo);
+  const st0 = state(), wasAsking = st0.asking && (msgs.length || Date.now() - (st0.askedAt || 0) >= 30000);
   const result = perform({ type: String(a.type || 'idle'), target: a.target, item: a.item });
   const S = state();
-  S.last = result; S.noticed = null;           // 눈에 띈 것은 한 번 전달하면 잊는다
+  S.last = result; S.noticed = null;                          // 눈에 띈 것은 한 번 전달하면 잊는다
+  if (wasAsking && S.asking === st0.asking) S.asking = null;   // 대답을 들었거나 기다리다 지쳤다(이번 행동이 새로 물은 건 남긴다)
   msgs.forEach(m => S.history.push(`${m.nick}(${m.kind === 'dona' ? '후원' : '채팅'}): ${m.text}`));
   S.history.push(`한별(나): ${line}`, `결과: ${result}`);
   S.history = S.history.slice(-8);
@@ -23,13 +26,15 @@ function applyTurn(out, msgs) {
    비용 보호: 호출 간 최소 간격(MIN_GAP). 조용한 상태로 AUTO_LIMIT턴이 지나면 멈추지 않고
    IDLE_DELAY 간격으로 느려진다. 탭이 가려져 있으면 호출하지 않는다. */
 const MIN_GAP = 4000, AUTO_DELAY = 8000, AUTO_LIMIT = 6, IDLE_DELAY = 15000;
+const MIN_GAP_PLAYER = 1500;   // 플레이어의 채팅·후원에는 더 빨리 반응한다("숨어!" 같은 타이밍 훈수가 늦지 않게)
 let pending = [], inFlight = false, turnTimer, turnDue = 0, lastCall = 0, fails = 0, autoTurns = 0;
 // 주소 뒤에 ?auto=off 를 붙이면 스트리머가 스스로 행동하지 않는다(채팅·후원이 올 때만 반응. 테스트용)
 const AUTO_OFF = new URLSearchParams(location.search).get('auto') === 'off';
 function schedule(delay) {
   clearTimeout(turnTimer);
   if (AUTO_OFF && !pending.length) return;
-  const wait = Math.max(delay, lastCall + MIN_GAP - Date.now());
+  const gap = pending.some(m => m.role === 'me') ? MIN_GAP_PLAYER : MIN_GAP;
+  const wait = Math.max(delay, lastCall + gap - Date.now());
   turnDue = Date.now() + wait;
   turnTimer = setTimeout(turn, wait);
 }
@@ -39,10 +44,17 @@ async function turn() {
   turnDue = 0;
   if (inFlight) return;
   // 걷기·사망·스테이지 전환 연출 중이거나 클리어 직후면 끝날 때까지 기다린다
-  if (document.hidden || isBusy() || state().cleared) return schedule(1500);
+  // 걷는 중이면 시청자 메시지가 왔을 때만 멈춰 세우고 새로 정한다(혼자서는 끊지 않는다)
+  const walkStop = pending.length && canInterrupt();
+  if (document.hidden || isPaused() || (isBusy() && !walkStop) || state().cleared) return schedule(pending.length ? 500 : 1500);
+  // 한별이 시청자에게 물어본 뒤에는 대답(채팅·후원)이 올 때까지 스스로 움직이지 않는다(최대 30초)
+  if (state().asking && !pending.length && Date.now() - (state().askedAt || 0) < 30000) return schedule(1500);
+  // 위험이 다가오는 중(경고·굴러옴)에는 시청자 말 없이 스스로 길에 나서지 않는다(겁이 많은 한별). 말리는 건 시청자 몫
+  if (!pending.length && (hazardNow() === 'warn' || hazardNow() === 'roll')) return schedule(1000);
   const raw = pending; pending = [];
   // 채팅은 채팅창이 붐빌수록 놓친다(후원은 반드시 읽는다). 놓친 메시지는 스트리머에게 전달되지 않는다
-  const readChance = Math.max(0.35, 1 - chatNoise() * 0.1);
+  // 최근 8초에 다른 시청자 줄이 2줄을 넘으면 1줄마다 7%씩 놓친다(최소 40%는 읽음)
+  const readChance = Math.max(0.4, 1 - Math.max(0, chatNoise() - 2) * 0.07);
   const msgs = raw.filter(m => m.kind === 'dona' || Math.random() < readChance).slice(-5);
   raw.forEach(m => m.el && markRead(m.el, msgs.includes(m)));
   if (raw.length) { autoTurns = 0; if (msgs.length) setFace('think'); } else autoTurns++;
@@ -51,7 +63,8 @@ async function turn() {
   try {
     const out = aiOn() ? await callGemini(SYSTEM, buildPrompt(msgs)) : await mockBrain();
     fails = 0;
-    if (S === state() && !isBusy()) applyTurn(out, msgs);   // 호출 도중 리셋·연출이 시작됐으면 버린다
+    await whenResumed();                                       // 응답 도중 튜토리얼 창이 떴으면 닫힐 때까지 미룬다
+    if (S === state() && (!isBusy() || canInterrupt())) applyTurn(out, msgs);   // 호출 도중 리셋·연출(걷기 제외)이 시작됐으면 버린다
   } catch (e) {
     fails++; setFace('normal');
     addLine('⚠ AI 응답 실패: ' + esc(String(e.message || e).slice(0, 140)), 'sys');
@@ -109,6 +122,8 @@ $('guideBtn').onclick = e => { document.body.classList.toggle('guide'); e.target
 
 
 setOnConfigChange(() => { fails = 0; schedule(500); });
+// 튜토리얼 창을 닫은 직후에는 플레이어가 상황을 볼 시간을 준다(바로 스스로 움직이지 않게)
+onResume(() => { if (!pending.length) schedule(AUTO_DELAY); });
 startFromUrl();
 setTimeout(() => say('하이 하이~! 오늘은 진짜 한 번에 깬다, 레츠 고!', 'happy'), 600);
 schedule(AUTO_DELAY);
