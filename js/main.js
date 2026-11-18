@@ -1,7 +1,8 @@
 /* 진입점: 턴 진행(AI 호출 타이밍), 플레이어 입력, 프로토타입 컨트롤 */
 import { $, esc, addLine, viewerLine, say, donate, setFace, drawBubble, chatNoise, markRead } from './ui.js';
 import * as viewers from './viewers.js';
-import { isPaused, whenResumed, onResume } from './pause.js';
+import { isPaused, whenResumed, onResume, isTest, onTest } from './pause.js';
+import './testmode.js';
 import { state, isBusy, canInterrupt, perform, startFromUrl, restartStage, hazardNow } from './stage.js';
 import { EMOS, SYSTEM, aiOn, buildPrompt, callGemini, mockBrain, setOnConfigChange } from './ai.js';
 
@@ -46,6 +47,7 @@ async function turn() {
   // 걷기·사망·스테이지 전환 연출 중이거나 클리어 직후면 끝날 때까지 기다린다
   // 걷는 중이면 시청자 메시지가 왔을 때만 멈춰 세우고 새로 정한다(혼자서는 끊지 않는다)
   const walkStop = pending.length && canInterrupt();
+  if (isTest()) { pending = []; return; }                       // 테스트 모드: AI를 부르지 않는다(꺼질 때 다시 잡는다)
   if (document.hidden || isPaused() || (isBusy() && !walkStop) || state().cleared) return schedule(pending.length ? 500 : 1500);
   // 한별이 시청자에게 물어본 뒤에는 대답(채팅·후원)이 올 때까지 스스로 움직이지 않는다(최대 30초)
   if (state().asking && !pending.length && Date.now() - (state().askedAt || 0) < 30000) return schedule(1500);
@@ -124,6 +126,7 @@ $('guideBtn').onclick = e => { document.body.classList.toggle('guide'); e.target
 setOnConfigChange(() => { fails = 0; schedule(500); });
 // 튜토리얼 창을 닫은 직후에는 플레이어가 상황을 볼 시간을 준다(바로 스스로 움직이지 않게)
 onResume(() => { if (!pending.length) schedule(AUTO_DELAY); });
+onTest(on => { pending = []; if (!on) schedule(AUTO_DELAY); });
 startFromUrl();
 setTimeout(() => say('하이 하이~! 오늘은 진짜 한 번에 깬다, 레츠 고!', 'happy'), 600);
 schedule(AUTO_DELAY);

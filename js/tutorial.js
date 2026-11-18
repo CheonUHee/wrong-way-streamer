@@ -6,7 +6,7 @@
    - '@이벤트': 그 일이 처음 일어났을 때. 조건(예: 'area:hall', ['doorOpen'])은 행동이 끝난 뒤 처음 맞았을 때
    - 같은 항목은 스테이지를 한 번 진행하는 동안 한 번만 나온다 */
 import { $, esc } from './ui.js';
-import { setPaused } from './pause.js';
+import { setPaused, isTest } from './pause.js';
 import { all } from './core.js';
 
 /* ── 도식(SVG, 320×180) ── */
@@ -95,7 +95,7 @@ let stage, getState, shown = new Set();
 export function reset(st, stateFn) { stage = st; getState = stateFn; shown = new Set(); queue = []; }
 // 이벤트('@start' 등) 또는 상태 변화 뒤 호출. 맞는 항목을 한 번씩 띄운다
 export function check(event) {
-  if (!stage?.tutorial) return;
+  if (!stage?.tutorial || isTest()) return;
   const s = getState();
   stage.tutorial.forEach((t, i) => {
     if (shown.has(i)) return;

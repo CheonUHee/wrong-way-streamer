@@ -39,7 +39,7 @@ export default {
     },
     room3: {
       name: '연습장 3',
-      env: room({ w: 10, openings: { north: [{ x: -2.5, w: 1.28, h: 2.24 }] } }),
+      env: room({ w: 10, openings: { north: [{ x: -2.5, w: 1.28, h: 2.24, glow: 0xbdf0a0 }] } }),   // 진짜 출구 뒤는 풀빛(다음 스테이지: 숲)
       entries: { start: { pos: [0, 2.6], look: [0, 1.5, -4] } },
       // 들어서자마자 한별이 시청자에게 묻는다: 스트리머를 말로 움직일 수 있다는 걸 보여 주는 장면
       enter: { do: ['ask:문이 두 개네? 채팅창, 어느 쪽으로 갈까?'] },
@@ -96,7 +96,7 @@ export default {
     },
     // ── 연습장 3: 갈림길 ──
     {
-      id: 'leftDoor', area: 'room3', name: '왼쪽 문', kind: 'door', model: DOOR,
+      id: 'leftDoor', area: 'room3', name: '왼쪽 문', kind: 'door', model: DOOR, openWhen: 'exitOpen',   // 열리면 문 너머 풀빛(다음 스테이지: 숲)이 보인다
       pos: [-2.5, 0, -4], stand: [-2.5, -2.6], look: [-2.5, 1.2, -4],
       desc: '정면 벽 왼쪽의 문',
     },
@@ -128,7 +128,7 @@ export default {
     { target: 'door2', say: '문을 밀어 봤지만 자물쇠로 잠겨 있다. 열쇠가 필요해 보인다' },
     { target: 'crate', say: '나무 상자를 열어 봤다. 안은 텅 비어 있다' },
 
-    { target: 'leftDoor', do: ['clear'], say: '왼쪽 문을 열고 나가자 출구가 나왔다. 튜토리얼 클리어!' },
+    { target: 'leftDoor', do: ['set:exitOpen', 'clear'], say: '왼쪽 문을 열자 풀빛이 쏟아지고 풀 냄새가 났다. 출구다! 튜토리얼 클리어!' },
     { target: 'rightDoor', say: '문고리를 잡으려 했는데… 벽에 그려진 그림이었다! 진짜 문이 아니다' },
   ],
 

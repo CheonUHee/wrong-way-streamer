@@ -6,7 +6,8 @@
 - 정식 스테이지: `stage1.js`(튜토리얼) · `stage2.js`(순서 퍼즐) · `stage3.js`(굴러오는 바위) · `stage4.js`(최종). 설계 로그는 `docs/stages/`
 - 예제: `cozy.js`(방 하나, 아이템 퍼즐), `demo.js`(여러 구역, 플레이어만 보는 단서, 스켈레톤·사망·재시작)
 - 실행: `http://localhost:8080/?stage=2` (순번) · `?stage=demo` (id)
-- 개발용 옵션: `?ai=off` (키가 있어도 더미 응답) · `?auto=off` (스트리머가 스스로 움직이지 않음) · `?viewers=off` (방해꾼·조력자 끔) · `?shot` (화면 캡처 함수 `window.__shot()`)
+- 개발 서버: `python tools/serve.py` (캐시를 꺼서 파일을 고치면 새로고침만으로 반영된다)
+- 개발용 옵션: `?test` (테스트 모드, 아래) · `?ai=off` (키가 있어도 더미 응답) · `?auto=off` (스트리머가 스스로 움직이지 않음) · `?viewers=off` (방해꾼·조력자 끔) · `?shot` (화면 캡처 함수 `window.__shot()`)
 - 검증: `node tools/validate.mjs [id] [--write]`
 
 ## 최상위
@@ -24,6 +25,7 @@
 | `viewers` | 다른 시청자(방해꾼·조력자) 설정(아래, 선택) |
 | `tutorial` | 플레이어 전용 튜토리얼 카드(아래, 선택) |
 | `aiNote` | 이 스테이지에서 AI에게 덧붙일 상황·성격 설명(선택) |
+| `arrive` | `{ say, history }` 앞 스테이지를 깨고 넘어왔을 때 한별의 첫마디와 AI 기록에 남길 지난 일(선택) |
 | `solution`, `tests` | 검증용 정답 경로와 시나리오 |
 
 ## 구역(areas)
@@ -55,6 +57,8 @@ room: {
 - 방(room): `grid: true`(프로토타입 격자 벽·바닥) · `colors: { wall, wainscot, trim, ceil }` · `glowColor`(개구부 뒤 빛 색) · 개구부마다 `glow` 색
 - 야외(outdoor): `border: 'fence' | 'bush' | 'cliff'` · `day: true`(낮 조명) · `path: 폭`(가운데 흙길) · `slope: 기울기`(북쪽으로 1m 갈 때 올라가는 높이. 땅·소품·오브젝트·눈높이에 모두 적용)
 - `cliff`: 동·서 변에 큰 바위 절벽을 세우고, `openings` 자리는 틈새(숨을 곳)로 비운다
+- 자동 꾸미기(`js/dress.js`): 가장자리·경계 밖·절벽 위를 테마 소품으로 빽빽하게 채운다. 오브젝트·서는 자리·입구·개구부 앞은 비워 둔다. 규칙·AI에는 영향이 없다.
+  `dress: 'proto' | 'forest' | 'valley' | 'ruins' | 'crypt' | 'graveyard' | false`(생략하면 env로 짐작) · `dressDensity: 1`(밀도 배율). 같은 구역은 언제나 같은 배치(구역 id로 정한 난수)
 
 ### 주기 위험(hazard): 굴러오는 바위·통
 
@@ -159,3 +163,14 @@ tests: [{ name: '금화에 다가가면 죽는다', actions: [...], expect: { de
 
 `dungeon` · `forest` · `furniture` · `halloween` · `proto` · `bath` · `skeleton`
 경로는 `js/packs.js`. KayKit 모델은 기본 0.8배(`S`)로 쓴다. Forest 팩의 덤불·풀은 크기가 작아 3배 정도 키워야 한다.
+
+## 테스트 모드(직접 돌아다니며 맵 확인)
+
+상단의 `🧪 테스트 모드` 버튼, 또는 주소에 `?test`(예: `?stage=3&test`). 켜면 AI 턴·다른 시청자·튜토리얼 창이 멈춘다(API 호출 없음).
+- 화면 클릭 → 마우스 시점, WASD 이동, Space/C 위·아래, Shift 빠르게, 방향키로도 시점, Esc 마우스 풀기. 벽은 통과한다.
+- 패널: 스테이지·구역 바로 가기, 굴러오는 위험 끄기, 현재 플래그·가방, 오브젝트마다 다가가기·상호작용·줍기·아이템 쓰기 버튼(규칙 엔진을 그대로 실행, 결과는 채팅창).
+- 오른쪽 아래: 카메라 좌표와 조준점이 가리키는 곳의 좌표·모델 이름(오브젝트면 id).
+- P 키: 조준점 좌표를 `decor` 한 줄로 클립보드에 복사하고 패널의 배치 메모에 쌓는다. 오르막 구역도 평지 기준 좌표로 나온다.
+
+소품을 더 놓는 순서: 테스트 모드에서 놓을 곳을 조준 → P → 스테이지 파일의 해당 구역 `decor` 배열에 붙여 넣고 모델 이름·회전·배율을 고친다 → 새로고침.
+모델 크기 확인: `node tools/bbox.mjs forest Tree_1_A_Color1 Bush_2_A_Color1` (배율 1 기준 가로·높이·세로)

@@ -11,7 +11,7 @@
    } */
 import { addLine, donate, esc, pick } from './ui.js';
 import { all, objectsIn } from './core.js';
-import { isPaused } from './pause.js';
+import { isPaused, isTest } from './pause.js';
 import * as tutorial from './tutorial.js';
 
 export const ROLES = {
@@ -43,7 +43,7 @@ const OFF = new URLSearchParams(location.search).get('viewers') === 'off';
 const TROLL_DONA_GAP = 15;
 let lastTrollDona = -99;
 export function speak(role, text, amount = 0) {
-  if (OFF) return;
+  if (OFF || isTest()) return;
   if (role === 'troll' && amount) {
     if (now() - lastTrollDona < TROLL_DONA_GAP) amount = 0;      // 간격이 안 됐으면 채팅으로 낮춘다
     else lastTrollDona = now();

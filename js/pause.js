@@ -8,4 +8,9 @@ export function setPaused(on) {
   if (!on) { const w = waiters; waiters = []; w.forEach(ok => ok()); resumeFns.forEach(fn => fn()); }
 }
 // 멈춰 있으면 풀릴 때까지 기다린다
+// 테스트 모드(js/testmode.js): 켜져 있으면 AI 턴·다른 시청자·튜토리얼이 멈추고 플레이어가 직접 조작한다
+let test = false; const testFns = [];
+export const isTest = () => test;
+export function setTest(on) { test = on; testFns.forEach(fn => fn(on)); }
+export const onTest = fn => testFns.push(fn);
 export const whenResumed = () => paused ? new Promise(ok => waiters.push(ok)) : Promise.resolve();

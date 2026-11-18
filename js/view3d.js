@@ -13,6 +13,7 @@ import { $ } from './ui.js';
 import { S, model, place, ownMaterials, clips } from './assets.js';
 import { objectsIn, cond } from './core.js';
 import { isPaused } from './pause.js';
+import { dressArea } from './dress.js';
 
 const EYE = 1.45;          // 눈높이(m)
 const WALK_SPEED = 2.2;    // 걷는 속도(m/s)
@@ -154,6 +155,7 @@ function buildOutdoor(env) {
     // 울타리 밖 나무(배경)
     for (let u = -side.len / 2 - 2; u <= side.len / 2 + 2; u += 2.6 + r() * 1.5) {
       const off = 1.6 + r() * 2.5;
+      if ((env.openings?.[name] || []).some(o => Math.abs(u - o.x) < o.w / 2 + 1.2)) continue;   // 통로 너머는 비워 둔다(다음 길이 보이게)
       const tree = env.dim ? ['halloween', r() < 0.5 ? 'tree_dead_large' : 'tree_dead_medium'] : ['forest', ['Tree_1_A_Color1', 'Tree_2_A_Color1', 'Tree_4_A_Color1', 'Tree_3_A_Color1'][Math.floor(r() * 4)]];
       place(envGroup, tree[0], tree[1], { pos: at(side, u, 0, side.fixed + Math.sign(side.fixed) * off).toArray(), rotY: r() * 6.28, scale: S * (0.8 + r() * 0.5) });
     }
@@ -338,12 +340,15 @@ export function loadArea(stage, s, areaId, entryId) {
   setLighting(area.env);
   (area.env.kind === 'outdoor' ? buildOutdoor : buildRoom)(area.env);
   for (const [p, n, pos, rotY = 0, scale = S] of area.decor || []) place(envGroup, p, n, { pos: lift(pos), rotY, scale });
+  // 자동 꾸미기(js/dress.js): 한별이 다니지 않는 가장자리·경계 밖을 테마 소품으로 채운다
+  for (const [p, n, pos, rotY, scale] of dressArea(areaId, area, stage.objects.filter(o => o.area === areaId))) place(envGroup, p, n, { pos: lift(pos), rotY, scale });
   for (const o of stage.objects.filter(o => o.area === areaId)) OBJ[o.id] = buildObject(o);
   const ent = area.entries[entryId] || Object.values(area.entries)[0];
   camera.position.set(ent.pos[0], EYE, ent.pos[1]);
   focus.set(...lift(ent.look));
   camera.position.y = EYE + gy(camera.position.z);
   tmp.position.copy(camera.position); tmp.lookAt(focus); camera.quaternion.copy(tmp.quaternion);
+  syncLook();
   arms.r.visible = arms.l.visible = true;
   render(stage, s); resize();
   spots = wanderSpots(area, stage.objects.filter(o => o.area === areaId));
@@ -372,7 +377,7 @@ export const hazardStatus = () => hz?.phase || null;
 function stepHazard(dt) {
   if (!hz) return;
   const H = hz.spec, roll = Math.abs(H.to - H.from) / (H.speed || 8), warn = H.warn ?? 2.5;
-  if (!autonomy || falling) { $('warn').classList.remove('show'); if (hz.mesh) hz.mesh.visible = false; return; }
+  if (!autonomy || falling || hazardOff) { $('warn').classList.remove('show'); if (hz.mesh) hz.mesh.visible = false; hz.phase = 'calm'; return; }
   hz.t += dt;
   if (hz.t >= H.period) { hz.t -= H.period; hz.hit = false; }
   const phase = hz.t < 0 ? 'calm' : hz.t < warn ? 'warn' : hz.t < warn + roll ? 'roll' : 'calm';
@@ -499,6 +504,62 @@ export function fall() {
   return new Promise(done => { falling = { t: 0, done }; });
 }
 
+/* ── 테스트 모드: 직접 조작 카메라 ──
+   WASD 이동, 마우스(화면 클릭 후) 시점, Space/C 위·아래, Shift 빠르게. 벽은 통과한다(맵 확인용).
+   화면 한가운데 조준점이 가리키는 곳의 좌표를 알려 준다(소품 배치용). */
+let freeCam = false, hazardOff = false, yaw = 0, pitch = 0, fly = 0;
+const keys = new Set(), euler = new THREE.Euler(0, 0, 0, 'YXZ');
+export function setFreeCam(on) {
+  freeCam = on; fly = 0; keys.clear();
+  if (!on && document.pointerLockElement) document.exitPointerLock();
+  if (on) { glance = null; wanderAt = Infinity; } else wanderAt = nextWander(simT);
+}
+export const setHazardOff = on => { hazardOff = on; };
+// 테스트 모드 '보기': 카메라를 [x, z]로 옮겨 look([x, y, z])을 바라본다
+export function viewFrom(pos, look) {
+  finishWalk(); fly = 0;
+  camera.position.set(pos[0], EYE + gy(pos[1]), pos[1]);
+  tmp.position.copy(camera.position); tmp.lookAt(...lift(look)); camera.quaternion.copy(tmp.quaternion); syncLook();
+}
+function syncLook() { euler.setFromQuaternion(camera.quaternion, 'YXZ'); yaw = euler.y; pitch = euler.x; }
+const typing = e => /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
+addEventListener('keydown', e => { if (freeCam && !typing(e)) { keys.add(e.code); if (/^(Space|KeyW|KeyA|KeyS|KeyD)$/.test(e.code)) e.preventDefault(); } });
+addEventListener('keyup', e => keys.delete(e.code));
+addEventListener('blur', () => keys.clear());
+renderer.domElement.addEventListener('click', () => { if (freeCam && !document.pointerLockElement) renderer.domElement.requestPointerLock?.(); });
+addEventListener('mousemove', e => {
+  if (!freeCam || document.pointerLockElement !== renderer.domElement) return;
+  yaw -= e.movementX * 0.0025; pitch = THREE.MathUtils.clamp(pitch - e.movementY * 0.0025, -1.45, 1.45);
+});
+function stepFree(dt) {
+  const sp = (keys.has('ShiftLeft') || keys.has('ShiftRight') ? 7 : 3) * dt;
+  const f = (keys.has('KeyW') ? 1 : 0) - (keys.has('KeyS') ? 1 : 0), s = (keys.has('KeyD') ? 1 : 0) - (keys.has('KeyA') ? 1 : 0);
+  camera.position.x += (-Math.sin(yaw) * f + Math.cos(yaw) * s) * sp;
+  camera.position.z += (-Math.cos(yaw) * f - Math.sin(yaw) * s) * sp;
+  fly = THREE.MathUtils.clamp(fly + ((keys.has('Space') ? 1 : 0) - (keys.has('KeyC') ? 1 : 0)) * sp, -1.2, 20);
+  if (keys.has('ArrowLeft')) yaw += dt * 1.8; if (keys.has('ArrowRight')) yaw -= dt * 1.8;
+  if (keys.has('ArrowUp')) pitch = Math.min(1.45, pitch + dt * 1.2); if (keys.has('ArrowDown')) pitch = Math.max(-1.45, pitch - dt * 1.2);
+  euler.set(pitch, yaw, 0, 'YXZ'); camera.quaternion.setFromEuler(euler);
+  return EYE + gy(camera.position.z) + fly;
+}
+// 조준점(화면 한가운데)이 가리키는 곳: 좌표와 맞은 것(오브젝트면 id)
+const ray = new THREE.Raycaster(), center = new THREE.Vector2(0, 0);
+export function probe() {
+  ray.setFromCamera(center, camera);
+  const hit = ray.intersectObjects([objGroup, envGroup], true).find(h => h.object.visible && h.object.type === 'Mesh');
+  const c = camera.position, r2 = n => Math.round(n * 100) / 100;
+  let obj = null;
+  if (hit) for (let o = hit.object; o && !obj; o = o.parent) for (const [id, e] of Object.entries(OBJ)) if (e.root === o) obj = id;
+  // 오르막 구역은 땅 높이를 빼서 데이터 좌표(평지 기준)로 돌려준다
+  const p = hit?.point;
+  return {
+    cam: [r2(c.x), r2(c.y - gy(c.z)), r2(c.z)], yaw: r2(yaw),
+    hit: p ? [r2(p.x), r2(p.y - gy(p.z)), r2(p.z)] : null, obj,
+    model: (() => { for (let o = hit?.object; o; o = o.parent) if (o.userData.model) return o.userData.model; return ''; })(),
+    dist: hit ? r2(hit.distance) : null,
+  };
+}
+
 /* ── 매 프레임 ── */
 const clock = new THREE.Clock();
 let simT = 0;                       // 일시정지를 뺀 게임 시간(초)
@@ -541,7 +602,7 @@ function step(maxDt) {
 
   // 한눈팔기: 가만히 있으면 가끔 다른 물건 쪽을 힐끔 본다
   if (walking || anim || foe || falling) idleSince = t;
-  if (!glance && !walk && !anim && !foe && !falling && t - idleSince > nextGlance && objectsNow.length > 1) {
+  if (!freeCam && !glance && !walk && !anim && !foe && !falling && t - idleSince > nextGlance && objectsNow.length > 1) {
     const o = objectsNow[Math.floor(Math.random() * objectsNow.length)];
     glance = { at: v3(...lift(o.look)), until: t + 1.3 };
     nextGlance = 4 + Math.random() * 4; idleSince = t;
@@ -549,11 +610,11 @@ function step(maxDt) {
   if (glance && t > glance.until) glance = null;
 
   // 자율 배회: AI가 시킨 일 없이 한동안 서 있으면 구역 안을 돌아다닌다
-  const free = autonomy && curArea?.wander !== false && !walk && !anim && !foe && !falling;
+  const free = autonomy && !freeCam && curArea?.wander !== false && !walk && !anim && !foe && !falling;
   if (!free) wanderAt = Math.max(wanderAt, nextWander(t));   // 시킨 일을 마친 뒤에도 한동안은 그 자리에 머문다
   else if (t > wanderAt) { explore(); wanderAt = nextWander(t); }
   // 시선 뺏기: 가까이 있는 눈길 끄는 물건(빛·반짝임·움직임)에 고개를 홱 돌린다. 걷는 중에도 일어난다
-  if (autonomy && !foe && !falling && !anim && t - lastNoticeCheck > 0.4) {
+  if (autonomy && !freeCam && !foe && !falling && !anim && t - lastNoticeCheck > 0.4) {
     lastNoticeCheck = t;
     const near = objectsNow.find(o => catchy(o) && o.id !== walk?.target && (t - (noticedAt[o.id] ?? -99)) > NOTICE_COOLDOWN
       && Math.hypot(o.pos[0] - camera.position.x, o.pos[2] - camera.position.z) < NOTICE_RANGE);
@@ -574,7 +635,8 @@ function step(maxDt) {
     if (p >= 1 && falling.done) { const d = falling.done; falling.done = null; d(); }
   }
   const k = falling ? 12 : foe ? 10 : walk && walk.wait > 0 ? 14 : glance ? 6 : 4;
-  camera.quaternion.slerp(lookQ, 1 - Math.exp(-k * dt));
+  if (freeCam && !walk && !falling && !foe) eyeY = stepFree(dt);   // 테스트 모드: 키보드·마우스로 직접 움직인다
+  else { camera.quaternion.slerp(lookQ, 1 - Math.exp(-k * dt)); syncLook(); }
   camera.position.y = eyeY;
   if (shake > 0) {
     shake = Math.max(0, shake - dt);

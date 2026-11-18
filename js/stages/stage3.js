@@ -17,6 +17,8 @@ export default {
   title: '바위 굴러오는 골짜기',
   goal: '굴러오는 바위를 피해 골짜기 꼭대기의 폐허 문까지 오르기',
   start: { area: 'lower', entry: 'start' },
+  // 이어지는 여정: 앞 스테이지를 깨고 넘어왔을 때 한별의 첫마디, AI에게 알려 주는 지난 일
+  arrive: { say: '숲을 빠져나왔더니 골짜기네… 저 위에서 뭐가 굴러오는 소리 안 나?', history: '숲속 공터의 바위 길을 지나 숲을 빠져나오자 바위 절벽 골짜기 아래에 도착했다' },
   aiNote: NOTE,
 
   items: { coin: { icon: '🪙', name: '금화 한 닢' } },
@@ -30,6 +32,21 @@ export default {
         reason: '길 한가운데 있다가 굴러 내려온 바위에 부딪혀 쓰러졌다' },
       entries: { start: { pos: [0, 15], look: [0, 2.5, -4] } },
       decor: [
+        // 이어지는 여정: 등 뒤(남쪽)는 방금 지나온 숲 공터의 덤불 출구(스테이지 2)
+        ['forest', 'Bush_1_C_Color1', [-2.6, 0, 18.2], 0.4, 2.8],
+        ['forest', 'Bush_3_A_Color1', [2.7, 0, 18.4], 1.9, 2.8],
+        ['forest', 'Tree_1_B_Color1', [-3.6, 0, 19.6], 0.2, 1.2],
+        ['forest', 'Tree_4_A_Color1', [3.8, 0, 19.8], 2.0, 1.2],
+        ['forest', 'Rock_1_K_Color1', [0.4, -1.4, 20.5], 0.6, 1.0],               // 가라앉은 그 바위
+        ['forest', 'Tree_3_A_Color1', [-1.2, 0, 22.5], 4.16, 1.2],
+        ['forest', 'Tree_1_C_Color1', [1.8, 0, 23.4], 0.04, 1.2],
+        ['forest', 'Tree_2_C_Color1', [-5.6, 0, 22], 4.76, 1.2],
+        ['forest', 'Tree_3_B_Color1', [5.8, 0, 22.4], 2.92, 1.2],
+        ['forest', 'Tree_4_C_Color1', [-2.8, 0, 25.5], 5.52, 1.4],
+        ['forest', 'Tree_2_D_Color1', [3.4, 0, 26], 4.96, 1.4],
+        ['forest', 'Tree_1_A_Color1', [0.2, 0, 27.5], 1.4, 1.4],
+        ['forest', 'Tree_4_A_Color1', [-7.4, 0, 26], 4.72, 1.4],
+        ['forest', 'Tree_1_B_Color1', [7.6, 0, 26.5], 2.96, 1.4],
         ['forest', 'Tree_2_A_Color1', [-3.4, 0, 15.5], 0.3, 1.0],
         ['forest', 'Bush_1_C_Color1', [3.2, 0, 14.2], 0.5, 1.6],
         ['forest', 'Rock_1_D_Color1', [-2.6, 0, 12], 0.4, 1.2],
@@ -43,7 +60,7 @@ export default {
     upper: {
       name: '폐허 오르막',
       wander: false,
-      env: valley({ d: 26, slope: 0.08, ground: 0x6f6a5e, path: 3.2, pathColor: 0x8b857a, sky: 0x9fb8d8, openings: { west: [{ x: 4, w: 2.4 }], east: [{ x: -4, w: 2.4 }] } }),
+      env: valley({ d: 26, slope: 0.08, dress: 'ruins', ground: 0x6f6a5e, path: 3.2, pathColor: 0x8b857a, sky: 0x9fb8d8, openings: { west: [{ x: 4, w: 2.4 }], east: [{ x: -4, w: 2.4 }] } }),
       hazard: { model: BOULDER, from: -11.5, to: 8.5, x: 0, lane: 3.6, radius: 1.05, lift: 1.08, speed: 10, period: 12, warn: 2.2, delay: 7,
         reason: '폐허 오르막 한가운데서 굴러온 바위에 부딪혀 쓰러졌다' },
       entries: { start: { pos: [0, 11.5], look: [0, 2.5, -6] } },
@@ -57,6 +74,15 @@ export default {
         ['dungeon', 'column', [3.4, 0, 2.4], 0, 0.9],
         ['dungeon', 'wall_broken', [-4.3, 0, -8.5], Math.PI / 2, 0.8],
         ['dungeon', 'banner_red', [-3.2, 0.3, -12.5], 0, 0.6],
+        // 철창문 너머: 다음 스테이지(지하 대전당)로 내려가는 묘지 납골당이 보인다
+        ['halloween', 'crypt', [0, 0, -20], 0, 0.6],
+        ['halloween', 'tree_dead_large', [-4, 0, -17.5], 0.6, 1.1],
+        ['halloween', 'tree_dead_medium', [4.2, 0, -18], 2.4, 1.1],
+        ['halloween', 'pumpkin_orange_jackolantern', [-1.6, 0, -16.2], 0.4, 0.6],
+        ['halloween', 'pumpkin_orange_jackolantern', [1.8, 0, -16.6], -0.5, 0.55],
+        ['halloween', 'gravestone', [-2.8, 0, -15.4], 0.2, 0.8],
+        ['halloween', 'gravestone', [3, 0, -15.2], -0.3, 0.8],
+        ['halloween', 'post_lantern', [-1.4, 0, -17.6], 0, 0.7],
       ],
     },
   },
@@ -108,7 +134,7 @@ export default {
     { target: 'chest', say: '빈 상자다' },
     { target: 'lever', if: '!gateOpen', do: ['set:gateOpen', 'checkpoint'], say: '레버를 당기자 끼기긱… 정면의 철창문이 위로 올라갔다!' },
     { target: 'lever', say: '레버는 이미 내려가 있다' },
-    { target: 'gate', if: 'gateOpen', do: ['clear'], say: '열린 철창문 안으로 뛰어들었다. 골짜기 탈출! 스테이지 클리어!' },
+    { target: 'gate', if: 'gateOpen', do: ['clear'], say: '열린 철창문 안으로 뛰어들었다. 그 너머 묘지의 납골당 계단이 땅 밑으로 이어진다. 골짜기 탈출! 스테이지 클리어!' },
     { target: 'gate', say: '철창문이 굳게 닫혀 있다. 근처에 여는 장치가 있을 것 같다' },
   ],
 

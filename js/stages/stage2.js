@@ -10,15 +10,35 @@ export default {
   title: '숲속 비밀 공터',
   goal: '북쪽 길을 막은 큰 바위를 치우고 숲을 빠져나가기',
   start: { area: 'glade', entry: 'start' },
+  // 이어지는 여정: 앞 스테이지를 깨고 넘어왔을 때 한별의 첫마디, AI에게 알려 주는 지난 일
+  arrive: { say: '어? 연습장 문을 나왔더니 숲이잖아?! 뒤에 문만 덩그러니 서 있어 ㅋㅋ', history: '연습장 3의 진짜 출구 문을 열고 나왔더니 숲속 공터였다. 등 뒤 덤불 사이에 방금 나온 문만 서 있다' },
 
   items: { coin: { icon: '🪙', name: '반짝이 동전' } },
 
   areas: {
     glade: {
       name: '숲속 공터',
-      env: { kind: 'outdoor', w: 14, d: 14, ground: 0x5f8a4a, sky: 0x9fd3ff, day: true, border: 'bush', openings: { north: [{ x: 0, w: 3.4 }] } },
+      env: { kind: 'outdoor', w: 14, d: 14, ground: 0x5f8a4a, sky: 0x9fd3ff, day: true, border: 'bush', openings: { north: [{ x: 0, w: 3.4 }], south: [{ x: 0, w: 2.6 }] } },
       entries: { start: { pos: [0, 5.6], look: [0, 1.2, -7] } },
       decor: [
+        // 이어지는 여정: 등 뒤 덤불 사이에 방금 나온 연습장 문이 덩그러니 서 있다(스테이지 1)
+        ['proto', 'Wall_Doorway', [0, 0, 7.4], Math.PI, 0.6],
+        ['proto', 'Door_A', [0.48, 0, 7.25], Math.PI + 1.2, 0.6],
+        // 북쪽 길 너머로 다음 스테이지(바위 골짜기)의 절벽 어귀가 보인다
+        ['forest', 'Rock_1_N_Color1', [-3.4, 0, -13.5], 0.3, 1.5],
+        ['forest', 'Rock_1_P_Color1', [3.6, 0, -14], 2.6, 1.6],
+        ['forest', 'Rock_1_O_Color1', [-5.2, 0, -16.5], 1.1, 1.8],
+        ['forest', 'Rock_1_Q_Color1', [5.4, 0, -17], 4.2, 1.8],
+        ['forest', 'Rock_1_K_Color1', [-2.6, 0, -11], 0.7, 1.1],
+        ['forest', 'Rock_1_J_Color1', [2.8, 0, -11.4], 2.2, 1.1],
+        ['forest', 'Rock_1_N_Color1', [-4.2, 0, -20.5], 2.0, 1.9],
+        ['forest', 'Rock_1_O_Color1', [4.4, 0, -21], 0.9, 2.0],
+        ['forest', 'Rock_1_P_Color1', [-3.6, 0, -25], 3.3, 2.1],
+        ['forest', 'Rock_1_Q_Color1', [3.8, 0, -25.5], 1.5, 2.1],
+        ['forest', 'Rock_1_M_Color1', [0, 0, -30], 0.4, 2.6],                    // 골짜기 끝을 막는 높은 바위(굽은 길처럼 보인다)
+        ['forest', 'Rock_3_A_Color1', [0.6, 0, -17], 0.3, 1.4],                   // 굴러 내려와 멈춘 둥근 바위(다음 스테이지 예고)
+        ['forest', 'Tree_2_B_Color1', [-7, 0, -22], 0.5, 1.4],
+        ['forest', 'Tree_4_B_Color1', [7.2, 0, -23], 1.5, 1.4],
         ['forest', 'Tree_1_A_Color1', [-6.1, 0, -2.2], 0.4, 1.25],          // 큰 나무(나무 버튼 옆)
         ['forest', 'Bush_1_C_Color1', [6.2, 0, 1.0], 0.2, 1.9],             // 덤불 무더기(덤불 버튼 옆)
         ['forest', 'Bush_1_C_Color1', [6.3, 0, 2.4], 1.4, 1.5],
@@ -78,7 +98,7 @@ export default {
     { target: 'btnRock', if: ['p2', '!gateOpen'], do: ['set:gateOpen'], say: '바위 옆 버튼을 누르자 쿠웅… 북쪽 길을 막던 큰 바위가 땅속으로 가라앉았다!' },
     { target: ['btnTree', 'btnBush', 'btnRock'], if: 'gateOpen', say: '버튼은 모두 눌려 있다. 길은 이미 열렸다' },
     { target: ['btnTree', 'btnBush', 'btnRock'], do: ['unset:p1', 'unset:p2'], say: '버튼을 눌렀더니 덜컥! 눌려 있던 버튼이 모두 튀어 올랐다. 순서가 틀렸나 보다' },
-    { target: 'stoneGate', if: 'gateOpen', do: ['clear'], say: '바위가 가라앉은 길을 지나 숲 밖으로 빠져나갔다. 스테이지 클리어!' },
+    { target: 'stoneGate', if: 'gateOpen', do: ['clear'], say: '바위가 가라앉은 길을 지나 숲 밖으로 빠져나갔다. 저 앞에 바위 절벽 골짜기가 보인다. 스테이지 클리어!' },
     { target: 'stoneGate', say: '커다란 바위가 길을 꽉 막고 있다. 밀어도 꿈쩍하지 않는다' },
     { target: 'coin', on: ['pickup', 'interact'], do: ['set:coinTaken', 'give:coin'], say: '반짝이던 것을 주웠다. 그냥 동전이다' },
   ],

@@ -19,6 +19,8 @@ export default {
   title: '해골 묘지의 지하 대전당',
   goal: '철창문을 열고 지하 대전당을 탈출하기',
   start: { area: 'hall', entry: 'start' },
+  // 이어지는 여정: 앞 스테이지를 깨고 넘어왔을 때 한별의 첫마디, AI에게 알려 주는 지난 일
+  arrive: { say: '납골당 계단으로 내려왔더니… 여기 완전 지하 대전당인데?!', history: '골짜기 꼭대기 철창문 너머 묘지의 납골당 계단을 내려와 지하 대전당에 들어섰다' },
 
   items: {
     key: { icon: '💀', name: '해골 열쇠' },
@@ -28,13 +30,14 @@ export default {
   areas: {
     hall: {
       name: '지하 대전당',
-      env: crypt({ w: 12, d: 12, openings: { north: [{ x: 0, w: 3.2, h: 3.2 }], west: [{ x: 0, w: 1.6, h: 2.6 }], east: [{ x: 0, w: 1.6, h: 2.6, glow: 0xffd66a }] } }),
+      env: crypt({ w: 12, d: 12, openings: { north: [{ x: 0, w: 3.2, h: 3.2 }], west: [{ x: 0, w: 1.6, h: 2.6 }], east: [{ x: 0, w: 1.6, h: 2.6, glow: 0xffd66a }], south: [{ x: 0, w: 1.8, h: 2.6, glow: 0xa9c4e0 }] } }),   // 남쪽: 내려온 계단(골짜기의 하늘빛)
       entries: {
         start: { pos: [0, 4.8], look: [0, 1.6, -6] },
         fromCandle: { pos: [-4.4, 0], look: [0, 1.6, -6] },
         fromVault: { pos: [4.4, 0], look: [0, 1.6, -6] },
       },
       decor: [
+        ['dungeon', 'stairs', [0, 0, 7.5], Math.PI, 0.36],                           // 이어지는 여정: 묘지(스테이지 3)에서 내려온 계단
         ['dungeon', 'pillar', [-4.6, 0, -4.6], 0, 0.6],
         ['dungeon', 'pillar', [4.6, 0, -4.6], 0, 0.6],
         ['dungeon', 'pillar', [-4.6, 0, 4.6], 0, 0.6],

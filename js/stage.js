@@ -129,7 +129,23 @@ async function onClear() {
   await new Promise(ok => setTimeout(ok, 3500));
   toast(`다음 스테이지: <em>${esc(STAGES[idx + 1].title)}</em>`, 2500);
   await view.transition(() => loadStage(idx + 1));
+  // 이어지는 여정: 앞 스테이지에서 넘어왔다는 것을 한별의 말과 AI 기록으로 잇는다
+  if (stage.arrive) {
+    if (stage.arrive.history) S.history.push(`결과: ${stage.arrive.history}`);
+    if (stage.arrive.say) setTimeout(() => say(stage.arrive.say, 'shout', 4500), 900);
+  }
 }
+
+/* 테스트 모드용: 구역 바로 가기, 상태 보기 */
+export function jumpArea(id) {
+  if (!stage.areas[id] || busy) return false;
+  const ent = Object.keys(stage.areas[id].entries)[0];
+  Object.assign(S, { area: id, entry: ent, at: null, near: null, dead: false });
+  if (!S.visited.includes(id)) S.visited.push(id);
+  view.loadArea(stage, S, id, ent);
+  return true;
+}
+export const stageIndex = () => idx;
 
 /* AI용 정보 */
 export const context = () => ({ ...core.promptContext(stage, S), hazard: view.hazardStatus() });

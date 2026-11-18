@@ -26,7 +26,7 @@ export async function model(pack, name, scale = S) {
 // parent 아래에 모델을 놓는다. 불러오기가 끝나기 전에도 parent는 바로 쓸 수 있다.
 export function place(parent, pack, name, { pos = [0, 0, 0], rotY = 0, scale = S } = {}) {
   return model(pack, name, scale).then(m => {
-    m.position.set(...pos); m.rotation.y = rotY;
+    m.position.set(...pos); m.rotation.y = rotY; m.userData.model = `${pack}/${name}`;   // 테스트 모드 조준점에 이름을 보여 준다
     parent.add(m);
     return m;
   }).catch(err => { console.warn('에셋 불러오기 실패:', pack, name, err); return null; });
