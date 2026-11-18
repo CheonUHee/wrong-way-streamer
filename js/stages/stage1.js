@@ -125,6 +125,8 @@ export default {
     { target: ['key', 'table'], on: ['pickup', 'interact'], if: '!keyTaken', do: ['set:keyTaken', 'give:key'], say: '책상 위의 열쇠를 주웠다' },
     { target: 'door2', on: 'use', item: '열쇠', if: '!door2Open', do: ['set:door2Open', 'take:열쇠'], say: '열쇠를 꽂아 돌리자 자물쇠가 철컥 풀리며 문이 열렸다' },
     { target: 'door2', if: 'door2Open', do: ['goto:room3@start'], say: '열린 문을 지나 연습장 3으로 들어왔다' },
+    // 열쇠를 들고 문을 밀기만 하면, 아이템을 '써야' 한다는 걸 결과 문장으로 알려 준다(Gemini 플레이테스트: 밀어 보고 상자를 뒤지러 감)
+    { target: 'door2', if: 'has:열쇠', say: '문을 밀어 봤지만 자물쇠로 잠겨 있다. 가방에 있는 열쇠를 이 문에 써 봐야겠다' },
     { target: 'door2', say: '문을 밀어 봤지만 자물쇠로 잠겨 있다. 열쇠가 필요해 보인다' },
     { target: 'crate', say: '나무 상자를 열어 봤다. 안은 텅 비어 있다' },
 
@@ -137,7 +139,8 @@ export default {
     troll: 0, helper: 0,
     script: [
       { role: 'helper', when: ['area:room1', '!door1Open'], delay: 35, text: '저 빨간 버튼 누르라고 해 봐' },
-      { role: 'troll', when: 'area:room3', delay: 10, text: '오른쪽 문 ㄱㄱ 과녁 붙은 게 출구임 ㅋㅋ', dona: 3000 },
+      // 한별이 물은 직후에 끼어든다: 플레이어가 대답하기 전에 후원이 오면 '후원은 반드시 읽힌다'를 바로 겪는다(Gemini 플레이테스트: 10초 뒤면 이미 클리어해서 후원을 못 봄)
+      { role: 'troll', when: 'area:room3', delay: 2.5, text: '오른쪽 문 ㄱㄱ 과녁 붙은 게 출구임 ㅋㅋ', dona: 3000 },
     ],
   },
 
