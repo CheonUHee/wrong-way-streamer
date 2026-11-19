@@ -35,9 +35,12 @@ export const ART = {
     + [0, 1, 2].flatMap(r => [0, 1, 2].map(c => `<rect x="${30 + c * 32}" y="${66 + r * 30}" width="28" height="26" rx="5" fill="#ffffff14" stroke="${r + c === 0 ? C.acc : '#ffffff30'}" stroke-width="${r + c === 0 ? 2 : 1}"/>`)).join('')
     + `<text x="44" y="85" font-size="14" text-anchor="middle">🗝️</text>` + arrow(140, 100, 190, 100)
     + `<rect x="196" y="60" width="44" height="80" rx="4" fill="#8a5a44"/><circle cx="232" cy="102" r="4" fill="${C.acc}"/>` + chatLine(160, 150, '나', C.me, '열쇠를 문에 써', 140)),
-  // 너만 보이는 단서: 표지판·그림은 한별에게 흐릿하다
-  clue: svg(defs + screen(10, 20, 140, 130) + `<rect x="40" y="50" width="80" height="44" rx="4" fill="#d9b98a"/><text x="80" y="79" font-size="18" text-anchor="middle" fill="#2a1a12" font-weight="900">GOAL ➜</text><text x="80" y="140" font-size="10" fill="${C.ok}" text-anchor="middle">👀 너의 화면</text>`
-    + screen(170, 20, 140, 130) + `<rect x="200" y="50" width="80" height="44" rx="4" fill="#d9b98a" opacity=".6"/><text x="240" y="79" font-size="18" text-anchor="middle" fill="#2a1a12" opacity=".25" font-weight="900">? ? ?</text>` + face(240, 118, 13) + `<text x="240" y="146" font-size="10" fill="${C.dim}" text-anchor="middle">한별에게는 흐릿함</text>`),
+  // 단서와 위치: 한별은 단서를 읽지만, 그게 어느 물건·어느 쪽인지는 모른다 → 플레이어가 위치를 알려 준다
+  clue: svg(defs + screen(10, 20, 300, 112)
+    + `<rect x="36" y="62" width="40" height="62" rx="3" fill="#8a5a44"/><rect x="244" y="62" width="40" height="62" rx="3" fill="#8a5a44"/><circle cx="264" cy="90" r="9" fill="none" stroke="#fff" stroke-width="3"/>`
+    + `<rect x="122" y="40" width="76" height="30" rx="4" fill="#ffe14a"/><text x="160" y="61" font-size="15" text-anchor="middle" fill="#1a1500" font-weight="900">⬅ GOAL</text>`
+    + face(160, 108, 13) + bubble(174, 78, '어느 문?', 66)
+    + chatLine(70, 146, '나', C.me, '왼쪽 문이야!', 120) + arrow(130, 144, 152, 124)),
   // 한별이 물어보면 대답하기
   ask: svg(defs + screen(10, 20, 190, 140) + face(170, 132) + bubble(30, 96, '어느 문으로 갈까?', 120)
     + `<rect x="212" y="20" width="98" height="140" rx="8" fill="${C.panel}" stroke="${C.line}"/>` + chatLine(218, 110, '나', C.me, '왼쪽 문!', 86) + arrow(216, 120, 154, 112)),

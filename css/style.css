@@ -2,6 +2,7 @@
   --bg: #0e0f13; --panel: #16181f; --panel2: #1e2129; --line: #2a2e39;
   --text: #e8eaf0; --dim: #8b90a0; --accent: #ffe14a; --accent-ink: #1a1500;
   --live: #ff4d5e; --me: #6fd3ff; --topbar: 48px; --chat: 360px;
+  --hair: #d3e7a5;                                   /* 스트리머 한별의 머리 색(채팅창의 한별 대사) */
 }
 * { box-sizing: border-box; }
 html, body { height: 100%; margin: 0; }
@@ -179,11 +180,26 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .log p { margin: 0; word-break: break-all; }
 .log .nick { font-weight: 700; margin-right: 6px; }
 .log .me .nick { color: var(--me); }
-.log .readtag { margin-left: 6px; font-size: 11px; color: var(--me); opacity: .8; white-space: nowrap; }
-.log .readtag.missed { color: var(--dim); }
+/* 내 채팅: 읽음·놓침 연출(판정 순간에 한 번 재생). 칸 모양은 미리 잡아 둬서 연출 때 줄이 밀리지 않는다 */
+.log p.me { padding: 2px 6px; border-radius: 5px; }
+.log .readtag { display: inline-block; margin-left: 6px; font-size: 11px; vertical-align: -3px; white-space: nowrap; }   /* inline-block: 취소선이 붙지 않게 */
+.log .readtag.seen svg { width: 17px; height: 17px; display: block; animation: stamp .45s cubic-bezier(.3, 1.6, .5, 1) both; }
+.log .readtag.missed { color: var(--dim); vertical-align: 0; }
+.log p.me.read { animation: readFlash 1.2s ease-out; }
+.log p.me.missed { opacity: .42; text-decoration: line-through; text-decoration-color: #8b90a0; text-decoration-thickness: 1.5px;
+  box-shadow: inset 3px 0 0 #8b90a066; animation: missFade 1.4s ease-out; }
+@keyframes stamp { 0% { transform: scale(0) rotate(-25deg); opacity: 0; } 60% { transform: scale(1.35) rotate(8deg); opacity: 1; } 100% { transform: scale(1) rotate(0); } }
+@keyframes readFlash {
+  0%   { background: #ffe14a40; box-shadow: 0 0 0 1px #ffe14acc, 0 0 12px #ffe14a77; }
+  100% { background: transparent; box-shadow: 0 0 0 1px #ffe14a00, 0 0 0 #ffe14a00; }
+}
+@keyframes missFade {
+  0%   { opacity: 1; box-shadow: inset 3px 0 0 #8b90a066, 0 0 0 1px #b4b9c8cc, 0 0 10px #b4b9c866; }
+  100% { opacity: .42; box-shadow: inset 3px 0 0 #8b90a066, 0 0 0 1px #b4b9c800, 0 0 0 #b4b9c800; }
+}
 .log .sys { color: var(--dim); font-size: 12px; text-align: center; }
-.log .streamer-line { background: #ffe14a14; border-left: 3px solid var(--accent); padding: 4px 8px; border-radius: 4px; }
-.log .streamer-line .nick { color: var(--accent); }
+.log .streamer-line { background: #d3e7a514; border-left: 3px solid var(--hair); padding: 4px 8px; border-radius: 4px; }
+.log .streamer-line .nick { color: var(--hair); }
 .log .dona-line { background: var(--panel2); border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px; }
 .log .dona-line .amt { color: var(--accent); font-weight: 800; display: block; font-size: 12px; }
 .log .dona-line.me { border-color: var(--me); }
@@ -273,3 +289,8 @@ body.testing .testpanel { display: block; }
 .crosshair { display: none; position: absolute; left: 50%; top: 50%; width: 10px; height: 10px; margin: -5px 0 0 -5px; border: 2px solid #fff; border-radius: 50%; box-shadow: 0 0 0 1px #0008; pointer-events: none; z-index: 3; }
 body.testing .hud.probe, body.testing .crosshair { display: block; }
 body.testing .streamer, body.testing .bubble { opacity: .25; }
+/* 소품 편집기(테스트 패널 안) */
+.testpanel .edbox summary { cursor: pointer; font-weight: 700; }
+.testpanel .edbox button { background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 2px 8px; font-size: 12px; color: inherit; }
+.testpanel .edbox button:hover { border-color: #9fb2ff; }
+.testpanel .edbox select, .testpanel .edbox input:not([type]) { background: var(--panel); color: inherit; border: 1px solid var(--line); border-radius: 5px; padding: 2px 6px; font-size: 12px; max-width: 220px; }

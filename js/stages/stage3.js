@@ -1,22 +1,30 @@
 /* 스테이지 3: 바위 굴러오는 골짜기 (테마: Forest Nature → Dungeon, 난이도: 중급)
    설계 로그: docs/stages/stage3.md
-   외길 오르막에 주기적으로 큰 바위가 굴러 내려온다. 길(lane) 위에 있다가 바위가 지나가면 쓰러지고, 절벽의 틈새(spot)는 안전하다.
+   외길 오르막에 주기적으로 골짜기를 꽉 채우는 둥근 바위가 굴러 내려온다. 길(lane) 위에 있다가 바위가 지나가면 쓰러지고, 절벽의 틈새(spot)는 안전하다.
    퍼즐 대신 "타이밍 훈수"가 핵심: 바위가 지나간 직후 "지금 가!" → 다음 틈새, 쿠르르릉 소리가 나면 "멈춰/숨어!".
-   정답: 아랫길 틈새 1 → 2 → 3 → 오르막 끝 → 폐허 틈새 4 → 레버가 있는 틈새(레버 당기기) → 열린 철창문 */
+   아랫길은 72m에 틈새 6개(약 11m 간격). 주기 13초 안에 한 칸만 갈 수 있어서, 한 번에 뛰어 올라가거나 틈새를 건너뛰면 맞는다.
+   정답: 아랫길 틈새 1 → 2 → 3 → 4 → 5 → 6 → 오르막 끝 → 폐허 틈새 → 레버가 있는 틈새(레버 당기기) → 열린 철창문 */
 const valley = extra => ({ kind: 'outdoor', w: 8, border: 'cliff', path: 3.2, day: true, ...extra });
-const BOULDER = { pack: 'forest', name: 'Rock_3_A_Color1', scale: 2.3 };
+// 코드로 만드는 둥근 바위(지름 6m: 골짜기 폭 8m를 거의 채운다). 틈새 안(x ±3.7)과 레버 앞(3.4)은 바위 가장자리(±3) 밖이라 안전하다
+const R = 3;
+const BOULDER = { sphere: true, color: 0x8f877b };
+const LESSON = '쿠르르릉 소리가 날 때 길 위에 있으면 바위에 맞는다. 소리가 나면 틈새에서 기다리고, 바위가 지나간 직후에 바로 위 틈새로 한 칸만 간다';
 const NOTE = '커다란 바위가 주기적으로 굴러 내려오는 좁은 오르막 외길이다. 길 위에 서 있다가 바위가 지나가면 맞고 쓰러진다. 절벽의 바위 틈새 안은 안전하다. '
   + '너는 겁이 나서, 시청자가 "지금 가"처럼 출발 신호를 주면 바로 위의 틈새로 한 칸씩 움직이는 편이다. 쿠르르릉 소리가 날 때 길로 나가는 건 위험하다. 틈새를 건너뛰면 길 위에 오래 있게 된다.';
 const spot = (id, area, name, x, z, desc) => ({
   id, area, name, kind: 'spot', solid: false, safe: true,
-  pos: [x, 0, z], stand: [Math.sign(x) * 3.1, z], look: [0, 1.3, z + 2.5], desc,
+  pos: [x, 0, z], stand: [Math.sign(x) * 3.7, z], look: [0, 1.3, z + 2.5], desc,
 });
+const ORD = ['첫', '두', '세', '네', '다섯', '여섯'];
+// 아랫길 틈새: 오른쪽(동)·왼쪽(서) 번갈아, 11m 간격. 절벽 구멍(openings)의 x는 그 변을 따라간 z 좌표다
+const NICHES = [[3.4, 26], [-3.4, 15], [3.4, 4], [-3.4, -7], [3.4, -18], [-3.4, -28]];
 
 export default {
   id: 'stage3',
   title: '바위 굴러오는 골짜기',
   goal: '굴러오는 바위를 피해 골짜기 꼭대기의 폐허 문까지 오르기',
   start: { area: 'lower', entry: 'start' },
+  reward: 500,                                      // 클리어 보상(⚡). 최종 스테이지 후원에 쓴다
   // 이어지는 여정: 앞 스테이지를 깨고 넘어왔을 때 한별의 첫마디, AI에게 알려 주는 지난 일
   arrive: { say: '숲을 빠져나왔더니 골짜기네… 저 위에서 뭐가 굴러오는 소리 안 나?', history: '숲속 공터의 바위 길을 지나 숲을 빠져나오자 바위 절벽 골짜기 아래에 도착했다' },
   aiNote: NOTE,
@@ -27,42 +35,51 @@ export default {
     lower: {
       name: '골짜기 아랫길',
       wander: false,                                // 배회 끔: 길 위로 저절로 걸어 나가면 억울하게 죽는다
-      env: valley({ d: 34, slope: 0.1, ground: 0x6d8a4f, sky: 0xa9d8ff, openings: { east: [{ x: 5, w: 2.4 }, { x: -10, w: 2.4 }], west: [{ x: -3, w: 2.4 }] } }),
-      hazard: { model: BOULDER, from: -18, to: 11, x: 0, lane: 3.6, radius: 1.05, lift: 1.08, speed: 9, period: 14, warn: 2.5, delay: 12,
-        reason: '길 한가운데 있다가 굴러 내려온 바위에 부딪혀 쓰러졌다' },
-      entries: { start: { pos: [0, 15], look: [0, 2.5, -4] } },
+      env: valley({ d: 72, slope: 0.07, ground: 0x6d8a4f, sky: 0xa9d8ff, openings: {
+        east: NICHES.filter(([x]) => x > 0).map(([, z]) => ({ x: z, w: 2.4 })),
+        west: NICHES.filter(([x]) => x < 0).map(([, z]) => ({ x: z, w: 2.4 })),
+      } }),
+      scenery: '양옆으로 높은 바위 절벽이 이어진 긴 오르막 골짜기. 절벽 틈에 풀과 덤불이 자라고, 위쪽 멀리 폐허 기둥이 보인다.',
+      // 주기 13초: 바위가 지나간 직후 출발하면 한 칸(약 11m, 걸어서 6초)은 넉넉하고, 두 칸을 한 번에 가면 맞는다
+      hazard: { model: BOULDER, from: -38, to: 29.5, x: 0, lane: 2 * R, radius: R, lift: R, speed: 10, period: 13, warn: 2.5, delay: 12,
+        reason: '길 한가운데 있다가 굴러 내려온 커다란 바위에 부딪혀 쓰러졌다', lesson: LESSON },
+      entries: { start: { pos: [0, 33.5], look: [0, 2.5, 20] } },
       decor: [
         // 이어지는 여정: 등 뒤(남쪽)는 방금 지나온 숲 공터의 덤불 출구(스테이지 2)
-        ['forest', 'Bush_1_C_Color1', [-2.6, 0, 18.2], 0.4, 2.8],
-        ['forest', 'Bush_3_A_Color1', [2.7, 0, 18.4], 1.9, 2.8],
-        ['forest', 'Tree_1_B_Color1', [-3.6, 0, 19.6], 0.2, 1.2],
-        ['forest', 'Tree_4_A_Color1', [3.8, 0, 19.8], 2.0, 1.2],
-        ['forest', 'Rock_1_K_Color1', [0.4, -1.4, 20.5], 0.6, 1.0],               // 가라앉은 그 바위
-        ['forest', 'Tree_3_A_Color1', [-1.2, 0, 22.5], 4.16, 1.2],
-        ['forest', 'Tree_1_C_Color1', [1.8, 0, 23.4], 0.04, 1.2],
-        ['forest', 'Tree_2_C_Color1', [-5.6, 0, 22], 4.76, 1.2],
-        ['forest', 'Tree_3_B_Color1', [5.8, 0, 22.4], 2.92, 1.2],
-        ['forest', 'Tree_4_C_Color1', [-2.8, 0, 25.5], 5.52, 1.4],
-        ['forest', 'Tree_2_D_Color1', [3.4, 0, 26], 4.96, 1.4],
-        ['forest', 'Tree_1_A_Color1', [0.2, 0, 27.5], 1.4, 1.4],
-        ['forest', 'Tree_4_A_Color1', [-7.4, 0, 26], 4.72, 1.4],
-        ['forest', 'Tree_1_B_Color1', [7.6, 0, 26.5], 2.96, 1.4],
-        ['forest', 'Tree_2_A_Color1', [-3.4, 0, 15.5], 0.3, 1.0],
-        ['forest', 'Bush_1_C_Color1', [3.2, 0, 14.2], 0.5, 1.6],
-        ['forest', 'Rock_1_D_Color1', [-2.6, 0, 12], 0.4, 1.2],
-        ['forest', 'Rock_1_F_Color1', [2.7, 0, 11.6], 1.2, 1.1],                 // 바위가 멈추는 곳(받이)
-        ['forest', 'Grass_1_A_Color1', [-2.3, 0, 7.4], 0, 2.5],
-        ['forest', 'Grass_1_A_Color1', [2.2, 0, -6], 1, 2.5],
-        ['dungeon', 'pillar', [-2.9, 0, -17.2], 0, 0.7],                          // 오르막 끝: 폐허가 보이기 시작
-        ['dungeon', 'pillar', [2.9, 0, -17.2], 0, 0.7],
+        ['forest', 'Bush_1_C_Color1', [-2.6, 0, 37.2], 0.4, 2.8],
+        ['forest', 'Bush_3_A_Color1', [2.7, 0, 37.4], 1.9, 2.8],
+        ['forest', 'Tree_1_B_Color1', [-3.6, 0, 38.6], 0.2, 1.2],
+        ['forest', 'Tree_4_A_Color1', [3.8, 0, 38.8], 2.0, 1.2],
+        ['forest', 'Rock_1_K_Color1', [0.4, -1.4, 39.5], 0.6, 1.0],               // 가라앉은 그 바위
+        ['forest', 'Tree_3_A_Color1', [-1.2, 0, 41.5], 4.16, 1.2],
+        ['forest', 'Tree_1_C_Color1', [1.8, 0, 42.4], 0.04, 1.2],
+        ['forest', 'Tree_2_C_Color1', [-5.6, 0, 41], 4.76, 1.2],
+        ['forest', 'Tree_3_B_Color1', [5.8, 0, 41.4], 2.92, 1.2],
+        ['forest', 'Tree_4_C_Color1', [-2.8, 0, 44.5], 5.52, 1.4],
+        ['forest', 'Tree_2_D_Color1', [3.4, 0, 45], 4.96, 1.4],
+        ['forest', 'Tree_1_A_Color1', [0.2, 0, 46.5], 1.4, 1.4],
+        ['forest', 'Tree_4_A_Color1', [-7.4, 0, 45], 4.72, 1.4],
+        ['forest', 'Tree_1_B_Color1', [7.6, 0, 45.5], 2.96, 1.4],
+        ['forest', 'Tree_2_A_Color1', [-3.4, 0, 34.5], 0.3, 1.0],
+        ['forest', 'Bush_1_C_Color1', [3.2, 0, 33.2], 0.5, 1.6],
+        ['forest', 'Rock_1_D_Color1', [-2.9, 0, 31], 0.4, 1.4],
+        ['forest', 'Rock_1_F_Color1', [2.9, 0, 30.6], 1.2, 1.3],                 // 바위가 멈추는 곳(받이)
+        ['forest', 'Grass_1_A_Color1', [-2.3, 0, 21], 0, 2.5],
+        ['forest', 'Grass_1_A_Color1', [2.2, 0, 9], 1, 2.5],
+        ['forest', 'Grass_1_A_Color1', [-2, 0, -2], 2, 2.5],
+        ['forest', 'Grass_1_A_Color1', [2.1, 0, -13], 3, 2.5],
+        ['forest', 'Grass_1_A_Color1', [-2.2, 0, -23], 4, 2.5],
+        ['dungeon', 'pillar', [-2.9, 0, -36.2], 0, 0.7],                          // 오르막 끝: 폐허가 보이기 시작
+        ['dungeon', 'pillar', [2.9, 0, -36.2], 0, 0.7],
       ],
     },
     upper: {
       name: '폐허 오르막',
       wander: false,
       env: valley({ d: 26, slope: 0.08, dress: 'ruins', ground: 0x6f6a5e, path: 3.2, pathColor: 0x8b857a, sky: 0x9fb8d8, openings: { west: [{ x: 4, w: 2.4 }], east: [{ x: -4, w: 2.4 }] } }),
-      hazard: { model: BOULDER, from: -11.5, to: 8.5, x: 0, lane: 3.6, radius: 1.05, lift: 1.08, speed: 10, period: 12, warn: 2.2, delay: 7,
-        reason: '폐허 오르막 한가운데서 굴러온 바위에 부딪혀 쓰러졌다' },
+      scenery: '무너진 돌기둥과 부서진 벽이 흩어진 폐허. 철창문 너머로 앙상한 나무와 묘비, 호박등이 보인다.',
+      hazard: { model: BOULDER, from: -10, to: 8, x: 0, lane: 2 * R, radius: R, lift: R, speed: 10, period: 12, warn: 2.2, delay: 7,
+        reason: '폐허 오르막 한가운데서 굴러온 커다란 바위에 부딪혀 쓰러졌다', lesson: LESSON },
       entries: { start: { pos: [0, 11.5], look: [0, 2.5, -6] } },
       decor: [
         ['dungeon', 'wall', [-3.2, 0, -13], 0, 0.8],                              // 철창문 양옆 벽
@@ -89,26 +106,25 @@ export default {
 
   objects: [
     // ── 아랫길 ──
-    spot('n1', 'lower', '첫 번째 틈새', 3.4, 5, '오른쪽 절벽의 첫 번째 바위 틈새(가장 가까움)'),
-    spot('n2', 'lower', '두 번째 틈새', -3.4, -3, '왼쪽 절벽의 두 번째 바위 틈새'),
-    spot('n3', 'lower', '세 번째 틈새', 3.4, -10, '오른쪽 절벽의 세 번째 바위 틈새(맨 위쪽)'),
+    ...NICHES.map(([x, z], i) => spot(`n${i + 1}`, 'lower', `${ORD[i]} 번째 틈새`, x, z,
+      `${x > 0 ? '오른쪽' : '왼쪽'} 절벽의 ${ORD[i]} 번째 바위 틈새${i === 0 ? '(가장 가까움)' : i === NICHES.length - 1 ? '(맨 위쪽, 오르막 끝 바로 앞)' : ''}`)),
     {
       id: 'coin', area: 'lower', name: '금화', showIf: '!coinTaken',
-      model: { pack: 'dungeon', name: 'coin_stack_small', scale: 0.7 }, pos: [0.4, 0, 1.2], stand: [0.4, 2.2], look: [0.4, 0.2, 1.2], solid: false,
+      model: { pack: 'dungeon', name: 'coin_stack_small', scale: 0.7 }, pos: [0.4, 0, 20.5], stand: [0.4, 21.5], look: [0.4, 0.2, 20.5], solid: false,
       fx: { glow: { color: 0xffd65a, intensity: 2.5 }, sparkle: {} },
       desc: '길 한가운데에 떨어져 반짝이는 금화',
     },
     {
       id: 'topLower', area: 'lower', name: '오르막 끝', kind: 'spot', solid: false, exit: 'upper@start',
-      pos: [0, 0, -16.6], stand: [0, -16.4], look: [0, 2, -20],
+      pos: [0, 0, -35.6], stand: [0, -35.4], look: [0, 2, -40],
       desc: '길 맨 위, 폐허 기둥 사이로 이어지는 오르막 끝',
       exitSay: '오르막 끝까지 올라 폐허 쪽으로 넘어갔다',
     },
     // ── 폐허 오르막 ──
-    spot('n4', 'upper', '네 번째 틈새', -3.4, 4, '왼쪽 절벽의 바위 틈새'),
+    spot('u1', 'upper', '폐허 틈새', -3.4, 4, '왼쪽 절벽의 바위 틈새'),
     {
       id: 'lever', area: 'upper', name: '레버', kind: 'lever', downWhen: 'gateOpen',
-      pos: [3.95, 1.25, -4], rotY: Math.PI, stand: [3.1, -4], look: [4, 1.25, -4],
+      pos: [3.95, 1.25, -4], rotY: Math.PI, stand: [3.4, -4], look: [4, 1.25, -4],
       safe: true,                                   // 레버 앞 = 오른쪽 틈새(숨을 곳). 틈새와 레버를 따로 두면 AI가 둘을 헷갈린다
       desc: [['gateOpen', '오른쪽 절벽 틈새 안 돌기둥의 레버. 내려가 있다(틈새 안이라 안전)'], '오른쪽 절벽 틈새 안 돌기둥에 붙은 레버(틈새 안이라 바위를 피할 수 있다)'],
     },
@@ -127,7 +143,8 @@ export default {
   ],
 
   rules: [
-    ...['n1', 'n2', 'n3', 'n4'].map(id => ({ target: id, on: ['move', 'interact'], say: `${{ n1: '첫', n2: '두', n3: '세', n4: '네' }[id]} 번째 바위 틈새에 쏙 숨었다. 여기는 안전하다` })),
+    ...NICHES.map((_, i) => ({ target: `n${i + 1}`, on: ['move', 'interact'], say: `${ORD[i]} 번째 바위 틈새에 쏙 숨었다. 여기는 안전하다` })),
+    { target: 'u1', on: ['move', 'interact'], say: '폐허 왼쪽 바위 틈새에 쏙 숨었다. 여기는 안전하다' },
     { target: 'lever', on: 'move', say: '레버가 있는 오른쪽 틈새에 쏙 숨었다. 여기는 안전하다' },
     { target: 'coin', on: ['pickup', 'interact'], do: ['set:coinTaken', 'give:coin'], say: '길 한가운데서 금화를 주웠다' },
     { target: 'chest', if: '!chestOpen', do: ['set:chestOpen'], say: '상자를 열어 봤지만 텅 비어 있다' },
@@ -158,9 +175,9 @@ export default {
   ],
 
   solution: [
-    { type: 'move', target: 'n1' }, { type: 'move', target: 'n2' }, { type: 'move', target: 'n3' },
+    ...NICHES.map((_, i) => ({ type: 'move', target: `n${i + 1}` })),
     { type: 'move', target: 'topLower' },
-    { type: 'move', target: 'n4' }, { type: 'interact', target: 'lever' },
+    { type: 'move', target: 'u1' }, { type: 'interact', target: 'lever' },
     { type: 'move', target: 'gate' },
   ],
   tests: [

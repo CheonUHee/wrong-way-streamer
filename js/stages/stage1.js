@@ -75,7 +75,7 @@ export default {
     {
       id: 'table', area: 'room2', name: '책상', model: { pack: 'proto', name: 'table_medium' }, rotY: 0.2,
       pos: [2.4, 0, -2.2], stand: [2.2, -0.9], look: [2.4, 0.7, -2.2],
-      desc: '오른쪽의 파란 책상', poke: '평범한 책상이다. 위에 뭔가 놓여 있다',
+      desc: [['keyTaken', '오른쪽의 파란 책상. 위에는 아무것도 없다'], '오른쪽의 파란 책상'],
     },
     {
       id: 'key', area: 'room2', name: '열쇠', showIf: '!keyTaken',
@@ -103,15 +103,15 @@ export default {
     {
       id: 'rightDoor', area: 'room3', name: '오른쪽 문', kind: 'door', model: { pack: 'proto', name: 'Door_A_Decorated' },
       pos: [2.5, 0, -4], stand: [2.5, -2.6], look: [2.5, 1.2, -4],
-      desc: '정면 벽 오른쪽의 문. 과녁 그림이 붙어 있다',
+      desc: [['fakeKnown', '정면 벽 오른쪽의 문. 오리 인형이 튀어나온 가짜 장난감 문이다'], '정면 벽 오른쪽의 문. 과녁 그림이 붙어 있다'],
     },
     {
       id: 'sign', area: 'room3', name: '안내판', kind: 'sign',
       label: { text: '⬅ GOAL', wall: true, y: 2.1, w: 1.7, h: 0.62, bg: '#ffe14a', color: '#1a1500', board: 0x34363d },
-      clue: '두 문 사이의 노란 안내판에 "⬅ GOAL"이 적혀 있다. AI에게는 내용을 알려 주지 않는다.',
+      clue: '두 문 사이의 노란 안내판에 "⬅ GOAL"이 적혀 있다. 한별도 읽지만, 화살표가 어느 문을 가리키는지는 헷갈려 한다.',
       pos: [0, 0, -3.95], stand: [0, -2.4], look: [0, 1.9, -4],
-      desc: '두 문 사이 벽에 붙은 노란 안내판. 글씨가 흐릿해서 잘 안 보인다',
-      poke: '안내판을 만져 봤다. 뭔가 쓰여 있는데 흐릿해서 모르겠다',
+      desc: '두 문 사이 벽에 붙은 노란 안내판. "GOAL"이라는 글씨와 화살표가 있다. 그런데 화살표가 두 문 중 어느 쪽을 가리키는지 헷갈린다(나는 왼쪽 오른쪽을 맨날 헷갈린다)',
+      poke: '안내판에 "GOAL"이랑 화살표가 있다. 근데 이게 어느 문 말하는 거지? 왼쪽 오른쪽이 헷갈린다',
     },
   ],
 
@@ -123,6 +123,8 @@ export default {
     { target: 'duck', say: '오리가 삑! 소리를 내며 더 신나게 춤춘다. 그것뿐이다' },
 
     { target: ['key', 'table'], on: ['pickup', 'interact'], if: '!keyTaken', do: ['set:keyTaken', 'give:key'], say: '책상 위의 열쇠를 주웠다' },
+    // 열쇠를 주운 뒤 책상을 다시 만졌을 때(전에는 '위에 뭔가 놓여 있다'가 계속 나와서 한별이 책상에 집착했다)
+    { target: 'table', on: ['interact', 'pickup'], say: '평범한 파란 책상이다. 열쇠는 이미 가방에 있고, 위에는 이제 아무것도 없다' },
     { target: 'door2', on: 'use', item: '열쇠', if: '!door2Open', do: ['set:door2Open', 'take:열쇠'], say: '열쇠를 꽂아 돌리자 자물쇠가 철컥 풀리며 문이 열렸다' },
     { target: 'door2', if: 'door2Open', do: ['goto:room3@start'], say: '열린 문을 지나 연습장 3으로 들어왔다' },
     // 열쇠를 들고 문을 밀기만 하면, 아이템을 '써야' 한다는 걸 결과 문장으로 알려 준다(Gemini 플레이테스트: 밀어 보고 상자를 뒤지러 감)
@@ -131,7 +133,9 @@ export default {
     { target: 'crate', say: '나무 상자를 열어 봤다. 안은 텅 비어 있다' },
 
     { target: 'leftDoor', do: ['set:exitOpen', 'clear'], say: '왼쪽 문을 열자 풀빛이 쏟아지고 풀 냄새가 났다. 출구다! 튜토리얼 클리어!' },
-    { target: 'rightDoor', say: '문고리를 잡으려 했는데… 벽에 그려진 그림이었다! 진짜 문이 아니다' },
+    // 가짜 문: 문 한가운데에서 용수철 오리 인형이 뿅 튀어나온다(pop은 화면 연출). 가짜라는 걸 확실히 보여 준다
+    { target: 'rightDoor', if: '!fakeKnown', do: ['pop', 'set:fakeKnown'], say: '문고리를 당기자 문 한가운데가 덜컥 열리며 용수철 달린 오리 인형이 뿅! 튀어나왔다. 깜짝 장난감 문이다. 진짜 출구가 아니다!' },
+    { target: 'rightDoor', do: ['pop'], say: '또 오리 인형이 뿅! 튀어나왔다. 이 문은 장난감이다. 출구는 다른 쪽이다' },
   ],
 
   // 다른 시청자: 연습장 3에서 방해꾼이 처음 후원으로 끼어든다(후원 튜토리얼이 이때 뜬다). 즉흥 대사는 끈다
@@ -155,7 +159,7 @@ export default {
     ] },
     { on: '@ask', cards: [
       { art: 'ask', title: '한별이 물어볼 때', text: '한별이 고민되면 채팅창에 물어봐. 대답해 주면 그대로 따라 줄 거야.' },
-      { art: 'clue', title: '너만 보이는 단서', text: '표지판과 그림은 너에게만 또렷하게 보여. 무엇이 쓰여 있는지 한별에게 알려 줘.' },
+      { art: 'clue', title: '단서와 위치', text: '한별도 표지판은 읽어. 하지만 그게 어디를 말하는지는 잘 몰라. 네가 보고 "왼쪽 문이야"처럼 위치를 알려 줘.' },
     ] },
     { on: '@dona', cards: [
       { art: 'dona', title: '채팅과 후원', text: '채팅창이 붐비면 네 채팅이 묻힐 수 있어. 후원 지시는 ⚡를 쓰는 대신 한별이 반드시 읽어.' },

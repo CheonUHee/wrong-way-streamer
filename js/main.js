@@ -3,7 +3,7 @@ import { $, esc, addLine, viewerLine, say, donate, setFace, drawBubble, chatNois
 import * as viewers from './viewers.js';
 import { isPaused, whenResumed, onResume, isTest, onTest } from './pause.js';
 import './testmode.js';
-import { state, isBusy, canInterrupt, perform, startFromUrl, restartStage, hazardNow } from './stage.js';
+import { state, isBusy, canInterrupt, perform, startFromUrl, restartStage, hazardNow, onReward } from './stage.js';
 import { EMOS, SYSTEM, aiOn, buildPrompt, callGemini, mockBrain, setOnConfigChange } from './ai.js';
 
 function applyTurn(out, msgs) {
@@ -87,6 +87,11 @@ function setMode(m) {
   $('input').placeholder = m === 'chat' ? '채팅을 입력하세요' : '스트리머에게 보낼 지시를 입력하세요';
   $('hint').textContent = m === 'chat' ? '채팅은 무료지만 스트리머가 놓칠 수 있어요.' : '후원 지시는 화면에 크게 뜨고, 스트리머가 반드시 읽어요.';
 }
+// 스테이지 클리어 보상(스테이지 2·3: +500⚡). 스테이지 1은 튜토리얼이라 보상 없음
+onReward(n => {
+  wallet += n; $('wallet').textContent = wallet.toLocaleString();
+  addLine(`⚡ 클리어 보상 +${n.toLocaleString()}⚡ (지갑 ${wallet.toLocaleString()}⚡)`, 'sys');
+});
 $('modeChat').onclick = () => setMode('chat');
 $('modeDona').onclick = () => setMode('dona');
 function send() {

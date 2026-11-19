@@ -98,7 +98,9 @@ export function perform(stage, s, a) {
   // 플레이어가 "멈춰!"라고 말릴 수 있는 턴을 하나 보장하기 위해서다.
   const approach = isTrap(stage, o) && s.at !== o.id;
   effects.push({ type: 'moveTo', obj: o.id });
-  s.at = o.id; s.near = null; if (!s.seen.includes(o.id)) s.seen.push(o.id);
+  s.at = o.id; s.near = null;
+  // 바로 옆(1.3m 안)에 있는 물건도 함께 가까이서 본 것으로 친다(책상 위 열쇠를 주웠으면 책상도 본 것)
+  for (const v of objectsIn(stage, s)) if (!s.seen.includes(v.id) && (v === o || Math.hypot(v.pos[0] - o.pos[0], v.pos[2] - o.pos[2]) < 1.3)) s.seen.push(v.id);
   if (approach) {
     const n = o.name;
     return { result: a.type === 'move' ? `${n} 바로 앞까지 다가갔다` : `${n} 바로 앞까지 다가갔다. 이제 손만 뻗으면 된다`, effects };
@@ -139,12 +141,15 @@ function applyDo(stage, s, list, effects, o) {
       if (!s.visited.includes(area)) { s.visited.push(area); applyDo(stage, s, stage.areas[area]?.enter?.do, effects, o); }
     }
     else if (cmd === 'enemy') effects.push({ type: 'enemy', enemy: arg, obj: o?.id });
-    else if (cmd === 'die') { s.dead = true; s.deaths.push({ area: s.area, obj: o?.name || '', reason: arg }); effects.push({ type: 'die', reason: arg }); }
+    else if (cmd === 'die') { s.dead = true; s.deaths.push({ area: s.area, obj: o?.name || '', objId: o?.id, reason: arg }); effects.push({ type: 'die', reason: arg }); }
     else if (cmd === 'clear') { s.cleared = true; effects.push({ type: 'clear' }); }
     // ask: 한별이 시청자에게 묻고, 대답이 올 때까지 스스로 움직이지 않는다
     // checkpoint: 지금까지 한 일(플래그·아이템)을 저장한다. 죽으면 이 구역 입구에서, 이 상태로 다시 시작
     else if (cmd === 'checkpoint') saveCheckpoint(s);
     else if (cmd === 'ask') { s.asking = arg; effects.push({ type: 'ask', text: arg }); }
+    // puff: 화면 연출만. 대상(촛대)에 불이 잠깐 붙었다가 꺼진다(오답이어도 '붙긴 붙었다'가 보이게). 규칙 판정에는 영향 없음
+    // pop: 화면 연출만. 대상(가짜 문)에서 깜짝 장난감이 튀어나왔다 들어간다
+    else if (cmd === 'puff' || cmd === 'pop') effects.push({ type: cmd, obj: o?.id });
   }
 }
 
@@ -153,15 +158,26 @@ export function kill(stage, s, reason, what = '') {
   s.dead = true; s.at = null; s.deaths.push({ area: s.area, obj: what, reason });
 }
 
+/* ── 죽음에서 배운 것 ──
+   한별은 쓰러진 이유를 기억하고, 같은 실수는 피하려 한다(퍼즐의 답을 알려 주지는 않는다: "무엇이 위험한가"만 배운다).
+   - 오브젝트 때문에 죽었으면: 그 오브젝트 설명 옆에 경고가 붙는다
+   - 주기 위험(바위·통)에 맞았으면: 구역의 hazard.lesson(없으면 기본 문장) */
+export function lessonOf(stage, d) {
+  if (d.objId) return `${d.obj}${josa(d.obj, '은', '는')} 함정이다. 다시는 손대지 않는다`;
+  return stage.areas[d.area]?.hazard?.lesson || '굴러오는 소리가 날 때 길 한가운데에 있으면 맞는다. 소리가 나면 틈새에 숨고, 지나간 뒤에 움직인다';
+}
+
 /* ── AI에게 줄 상황 정보 ── */
 export function promptContext(stage, s) {
-  const objs = objectsIn(stage, s).map(o => `- ${o.id}: ${describe(s, o)}${s.seen.includes(o.id) ? '' : ' (아직 가까이서 안 봄)'}`);
+  const killed = new Set(s.deaths.map(d => d.objId).filter(Boolean));
+  const objs = objectsIn(stage, s).map(o => `- ${o.id}: ${describe(s, o)}${s.seen.includes(o.id) ? '' : ' (아직 가까이서 안 봄)'}${killed.has(o.id) ? ' (⚠ 전에 이걸 건드렸다가 쓰러졌다)' : ''}`);
   const at = s.at ? objectById(stage, s.at)?.name + ' 앞' : (s.near || '입구 근처');
   const n = s.noticed && objectsIn(stage, s).find(o => o.id === s.noticed);
   return {
     goal: stage.goal,
     location: `${areaName(stage, s.area)} · ${at}`,
     note: [stage.aiNote, stage.areas[s.area]?.aiNote].filter(Boolean).join(' '),
+    scenery: stage.areas[s.area]?.scenery || '',
     asking: s.asking || '',
     objects: objs.join('\n'),
     inventory: s.inv.join(', ') || '비어 있음',
@@ -169,7 +185,7 @@ export function promptContext(stage, s) {
     noticed: n ? `${n.id}: ${describe(s, n)}` : '',
     history: s.history.join('\n') || '없음',
     deaths: s.deaths.length
-      ? s.deaths.map((d, i) => `- ${i + 1}번째: ${areaName(stage, d.area)}의 ${d.obj} 쪽에서 ${d.reason}`).join('\n')
+      ? s.deaths.map((d, i) => `- ${i + 1}번째: ${areaName(stage, d.area)}의 ${d.obj} 쪽에서 ${d.reason} → 배운 것: ${lessonOf(stage, d)}`).join('\n')
       : '없음',
   };
 }

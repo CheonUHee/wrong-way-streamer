@@ -153,12 +153,17 @@ export function addLine(html, cls = '') {
 }
 // 최근 ms 동안 다른 시청자가 올린 줄 수: 채팅창이 붐빌수록 스트리머가 내 채팅을 놓친다
 export const chatNoise = (ms = 8000) => chatTimes.filter(t => Date.now() - t < ms).length;
-// 내 채팅 옆에 스트리머가 읽었는지 표시
+// 내 채팅에 스트리머가 읽었는지 표시(판정은 한별의 다음 AI 턴이 시작될 때)
+// 읽음: 줄 끝에 한별 얼굴 아이콘이 콕 찍히고 줄이 노랗게 잠깐 반짝인다
+// 놓침: 줄 전체가 흐려지며 취소선이 그어지고, 칸 외곽선이 잠깐 빛났다 흐려진다
+const HANBYUL_ICON = '<svg viewBox="0 0 20 20" aria-hidden="true"><circle cx="10" cy="10.5" r="9" fill="#D3E7A5"/><ellipse cx="10" cy="11.5" rx="6" ry="6.2" fill="#ffe7da"/><path d="M4 10 Q5 3.5 10 4 Q15 3.5 16 10 Q14 6.5 12 6.3 Q11 8.4 8 8.6 Q6 8.8 4 10Z" fill="#D3E7A5"/><circle cx="8" cy="11.6" r="1" fill="#3a2a4a"/><circle cx="12" cy="11.6" r="1" fill="#3a2a4a"/><path d="M8.8 14 Q10 15 11.2 14" fill="none" stroke="#b2455e" stroke-width=".9" stroke-linecap="round"/></svg>';
 export function markRead(el, read) {
   if (!el?.isConnected) return;
   const tag = document.createElement('span');
-  tag.className = 'readtag' + (read ? '' : ' missed'); tag.textContent = read ? '👀 읽음' : '💨 놓침';
+  if (read) { tag.className = 'readtag seen'; tag.title = '한별이 읽음'; tag.innerHTML = HANBYUL_ICON; }
+  else { tag.className = 'readtag missed'; tag.textContent = '💨 놓침'; }
   el.appendChild(tag);
+  el.classList.add(read ? 'read' : 'missed');
 }
 export const NICKS = [['감자튀김', '#ff9e6b'], ['눈팅러', '#9bd0ff'], ['새벽반', '#c59bff'], ['치킨먹고싶다', '#ffb86b'], ['ㅇㅇ', '#7fd6c8'], ['고양이집사', '#ffd36b']];
 const CHATS = ['ㅋㅋㅋㅋㅋ', '아니 거기 아닌데요...', '이게 방송이지', '오늘 안에 깨긴 하냐', '귀여우니까 봐준다', '또 딴 데 본다 ㅋㅋ', '집중 집중!!', 'ㄹㅇㅋㅋ', '답답해서 내가 한다'];

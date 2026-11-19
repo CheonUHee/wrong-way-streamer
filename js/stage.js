@@ -101,6 +101,8 @@ async function play(effects, st, token) {
       if (token === playToken) before = null;                 // 구역을 넘어간 뒤에는 되돌리지 않는다
     }
     else if (e.type === 'enemy') await view.enemy(stage.enemies[e.enemy], spec(e.obj));
+    else if (e.type === 'puff') await view.puff(spec(e.obj));
+    else if (e.type === 'pop') await view.pop(spec(e.obj));
     else if (e.type === 'die') await dieAndRespawn(e.reason);
     else if (e.type === 'clear') await onClear();
   }
@@ -119,8 +121,13 @@ async function dieAndRespawn(reason) {
   await view.transition(() => { $('dead').classList.remove('show'); view.loadArea(stage, S, S.area, S.entry); });
 }
 
+// 클리어 보상: 스테이지 데이터의 reward(⚡)를 지갑에 더한다(main.js가 지갑을 가진다)
+let rewardHook = () => {};
+export const onReward = fn => { rewardHook = fn; };
+
 async function onClear() {
   view.render(stage, S); view.setAutonomy(false);
+  if (stage.reward) rewardHook(stage.reward);
   const last = idx < 0 || idx >= STAGES.length - 1;
   $('clearText').textContent = last ? '🎉 ALL CLEAR' : '🎉 STAGE CLEAR';
   $('clear').classList.add('show');

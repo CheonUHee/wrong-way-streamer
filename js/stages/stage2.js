@@ -1,8 +1,8 @@
 /* 스테이지 2: 숲속 비밀 공터 (테마: Forest Nature, 난이도: 초급)
    설계 로그: docs/stages/stage2.md
-   순서 퍼즐: 이끼 낀 석판을 닦으면 그림(🌳 ➜ 🌿 ➜ 🪨)이 드러난다. 그림은 플레이어만 볼 수 있다.
-   버튼 세 개는 모양이 똑같고, 옆에 있는 큰 나무·덤불·바위로만 구분된다 → 플레이어가 "나무 옆 버튼"처럼 말로 짚어 줘야 한다.
-   정답: 석판 닦기 → 나무 옆 버튼 → 덤불 옆 버튼 → 바위 옆 버튼 → 가라앉은 바위 문으로 나가기 */
+   순서 퍼즐: 이끼 낀 석판을 닦으면 그림(🌳 ➜ 🌿 ➜ 🪨)이 드러난다. 한별도 그림은 읽지만, 어느 버튼이 나무·덤불·바위 옆인지는 모른다.
+   버튼 세 개는 모양이 똑같고, 한별(AI)에게는 위치(왼쪽·오른쪽 앞·오른쪽 안쪽)로만 알려 준다 → 플레이어가 "나무 옆 버튼은 왼쪽 거야"처럼 짚어 줘야 한다.
+   정답: 석판 닦기 → 왼쪽(나무) 버튼 → 오른쪽 앞(덤불) 버튼 → 오른쪽 안쪽(바위) 버튼 → 가라앉은 바위 문으로 나가기 */
 const STONE = 0x8f9a86, BASE = 0x6f7466;
 
 export default {
@@ -10,15 +10,18 @@ export default {
   title: '숲속 비밀 공터',
   goal: '북쪽 길을 막은 큰 바위를 치우고 숲을 빠져나가기',
   start: { area: 'glade', entry: 'start' },
+  reward: 500,                                      // 클리어 보상(⚡). 다음 스테이지 후원에 쓴다
   // 이어지는 여정: 앞 스테이지를 깨고 넘어왔을 때 한별의 첫마디, AI에게 알려 주는 지난 일
   arrive: { say: '어? 연습장 문을 나왔더니 숲이잖아?! 뒤에 문만 덩그러니 서 있어 ㅋㅋ', history: '연습장 3의 진짜 출구 문을 열고 나왔더니 숲속 공터였다. 등 뒤 덤불 사이에 방금 나온 문만 서 있다' },
 
-  items: { coin: { icon: '🪙', name: '반짝이 동전' } },
+  items: {},
 
   areas: {
     glade: {
       name: '숲속 공터',
       env: { kind: 'outdoor', w: 14, d: 14, ground: 0x5f8a4a, sky: 0x9fd3ff, day: true, border: 'bush', openings: { north: [{ x: 0, w: 3.4 }], south: [{ x: 0, w: 2.6 }] } },
+      // 한별이 감탄할 거리(만질 수 있는 오브젝트가 아니다). 나무·덤불·바위의 위치는 쓰지 않는다: 쓰면 버튼 순서를 AI가 혼자 맞힌다
+      scenery: '키 큰 나무와 덤불, 이끼 낀 바위들이 공터를 빙 둘러싸고 있다. 햇살이 나뭇잎 사이로 쏟아지고, 새소리와 풀벌레 소리가 들린다. 북쪽 멀리 바위 절벽이 보인다.',
       entries: { start: { pos: [0, 5.6], look: [0, 1.2, -7] } },
       decor: [
         // 이어지는 여정: 등 뒤 덤불 사이에 방금 나온 연습장 문이 덩그러니 서 있다(스테이지 1)
@@ -57,25 +60,25 @@ export default {
     {
       id: 'tablet', area: 'glade', name: '돌 석판', kind: 'sign',
       label: { text: '🌳 ➜ 🌿 ➜ 🪨', showIf: 'tabletClean', bg: '#d8d0bb', color: '#2a2a2a', board: 0x7d7a70, w: 1.3, h: 0.62, y: 1.15 },
-      clue: '석판에 큰 나무 → 덤불 → 바위 그림이 화살표로 이어져 있다(버튼을 누를 순서). 닦기 전에는 이끼로 덮여 있고, AI는 그림 내용을 모른다.',
+      clue: '석판에 큰 나무 → 덤불 → 바위 그림이 화살표로 이어져 있다(버튼을 누를 순서). 닦기 전에는 이끼로 덮여 있다. 한별도 그림은 읽지만, 어느 버튼이 나무·덤불·바위 옆인지는 모른다.',
       pos: [-2.8, 0, 2.0], rotY: 0.25, stand: [-2.5, 3.3], look: [-2.8, 1.15, 2.0],
-      desc: [['tabletClean', '이끼를 닦아 낸 돌 석판. 그림 세 개가 화살표로 이어져 있는데 무슨 그림인지는 흐릿하다'], '왼쪽 앞, 이끼로 뒤덮인 낡은 돌 석판'],
-      poke: '석판에 그림이 그려져 있는데, 무슨 뜻인지 잘 모르겠다',
+      desc: [['tabletClean', '이끼를 닦아 낸 돌 석판. 큰 나무 → 덤불 → 바위 그림이 화살표로 이어져 있다(버튼을 누를 순서 같다). 그런데 버튼 세 개 중 어느 게 나무·덤불·바위 옆인지는 모르겠다'], '왼쪽 앞, 이끼로 뒤덮인 낡은 돌 석판'],
+      poke: '석판에는 큰 나무 → 덤불 → 바위 그림이 있다. 그런데 어느 버튼이 나무 옆이고 어느 게 바위 옆인지 모르겠다',
     },
     {
-      id: 'btnTree', area: 'glade', name: '나무 옆 버튼', kind: 'button', color: STONE, baseColor: BASE, downWhen: 'p1',
+      id: 'btnLeft', area: 'glade', name: '왼쪽 버튼', kind: 'button', color: STONE, baseColor: BASE, downWhen: 'p1',
       pos: [-5, 0, -0.9], stand: [-3.8, -0.9], look: [-5, 0.85, -0.9],
-      desc: '왼쪽 큰 나무 아래의 둥근 돌 버튼',
+      desc: '왼쪽에 있는 둥근 돌 버튼',                     // 큰 나무 옆(AI에게는 알려 주지 않는다)
     },
     {
-      id: 'btnBush', area: 'glade', name: '덤불 옆 버튼', kind: 'button', color: STONE, baseColor: BASE, downWhen: 'p2',
+      id: 'btnFront', area: 'glade', name: '오른쪽 앞 버튼', kind: 'button', color: STONE, baseColor: BASE, downWhen: 'p2',
       pos: [5, 0, 1.3], stand: [3.8, 1.3], look: [5, 0.85, 1.3],
-      desc: '오른쪽 앞, 덤불 무더기 옆의 둥근 돌 버튼',
+      desc: '오른쪽 앞에 있는 둥근 돌 버튼',                 // 덤불 무더기 옆
     },
     {
-      id: 'btnRock', area: 'glade', name: '바위 옆 버튼', kind: 'button', color: STONE, baseColor: BASE, downWhen: 'gateOpen',
+      id: 'btnBack', area: 'glade', name: '오른쪽 안쪽 버튼', kind: 'button', color: STONE, baseColor: BASE, downWhen: 'gateOpen',
       pos: [4.2, 0, -4.4], stand: [3.2, -3.4], look: [4.2, 0.85, -4.4],
-      desc: '오른쪽 안쪽, 둥근 바위 앞의 둥근 돌 버튼',
+      desc: '오른쪽 안쪽에 있는 둥근 돌 버튼',               // 둥근 바위 앞
     },
     {
       id: 'stoneGate', area: 'glade', name: '큰 바위', sinkWhen: 'gateOpen', sinkDepth: 4,
@@ -83,31 +86,25 @@ export default {
       pos: [0.6, 0, -6.9], stand: [0.4, -5.2], look: [0.4, 1.5, -6.9],
       desc: [['gateOpen', '북쪽 길. 막고 있던 바위가 가라앉아 길이 열려 있다'], '북쪽 길을 꽉 막고 있는 커다란 바위'],
     },
-    {
-      id: 'coin', area: 'glade', name: '반짝이는 것', showIf: '!coinTaken',
-      model: { pack: 'proto', name: 'Coin_A', scale: 0.35 }, pos: [1.6, 0.35, 0.6], stand: [1.4, 1.8], look: [1.6, 0.3, 0.6], solid: false,
-      fx: { anim: 'spin', glow: { color: 0xffd65a, intensity: 2 }, sparkle: {} },
-      desc: '공터 한가운데 풀밭에서 반짝반짝 빛나는 무언가',
-    },
   ],
 
   rules: [
-    { target: 'tablet', if: '!tabletClean', do: ['set:tabletClean', 'ask:석판에 그림이 있는데 난 잘 모르겠어. 채팅창, 뭐가 그려져 있어?'], say: '석판을 뒤덮은 이끼를 손으로 쓱쓱 닦아 냈다. 그림 같은 게 그려져 있다' },
-    { target: 'btnTree', if: ['!p1', '!gateOpen'], do: ['set:p1'], say: '큰 나무 옆 버튼이 딸깍 눌려 들어갔다' },
-    { target: 'btnBush', if: ['p1', '!p2'], do: ['set:p2'], say: '덤불 옆 버튼이 딸깍 눌려 들어갔다' },
-    { target: 'btnRock', if: ['p2', '!gateOpen'], do: ['set:gateOpen'], say: '바위 옆 버튼을 누르자 쿠웅… 북쪽 길을 막던 큰 바위가 땅속으로 가라앉았다!' },
-    { target: ['btnTree', 'btnBush', 'btnRock'], if: 'gateOpen', say: '버튼은 모두 눌려 있다. 길은 이미 열렸다' },
-    { target: ['btnTree', 'btnBush', 'btnRock'], do: ['unset:p1', 'unset:p2'], say: '버튼을 눌렀더니 덜컥! 눌려 있던 버튼이 모두 튀어 올랐다. 순서가 틀렸나 보다' },
+    { target: 'tablet', if: '!tabletClean', do: ['set:tabletClean', 'ask:석판에 나무 → 덤불 → 바위 그림이 있어! 근데 어느 버튼이 나무 옆이야? 채팅창, 알려 줘!'], say: '석판을 뒤덮은 이끼를 손으로 쓱쓱 닦아 냈다. 큰 나무 → 덤불 → 바위 그림이 화살표로 이어져 있다' },
+    // 결과 문장도 위치로만 말한다(나무·덤불·바위를 말하면 AI가 짝을 알아채 혼자 푼다)
+    { target: 'btnLeft', if: ['!p1', '!gateOpen'], do: ['set:p1'], say: '왼쪽 버튼이 딸깍 눌려 들어갔다' },
+    { target: 'btnFront', if: ['p1', '!p2'], do: ['set:p2'], say: '오른쪽 앞 버튼이 딸깍 눌려 들어갔다' },
+    { target: 'btnBack', if: ['p2', '!gateOpen'], do: ['set:gateOpen'], say: '오른쪽 안쪽 버튼을 누르자 쿠웅… 북쪽 길을 막던 큰 바위가 땅속으로 가라앉았다!' },
+    { target: ['btnLeft', 'btnFront', 'btnBack'], if: 'gateOpen', say: '버튼은 모두 눌려 있다. 길은 이미 열렸다' },
+    { target: ['btnLeft', 'btnFront', 'btnBack'], do: ['unset:p1', 'unset:p2'], say: '버튼을 눌렀더니 덜컥! 눌려 있던 버튼이 모두 튀어 올랐다. 순서가 틀렸나 보다' },
     { target: 'stoneGate', if: 'gateOpen', do: ['clear'], say: '바위가 가라앉은 길을 지나 숲 밖으로 빠져나갔다. 저 앞에 바위 절벽 골짜기가 보인다. 스테이지 클리어!' },
     { target: 'stoneGate', say: '커다란 바위가 길을 꽉 막고 있다. 밀어도 꿈쩍하지 않는다' },
-    { target: 'coin', on: ['pickup', 'interact'], do: ['set:coinTaken', 'give:coin'], say: '반짝이던 것을 주웠다. 그냥 동전이다' },
   ],
 
   viewers: {
     troll: 1, helper: 1,
     script: [
-      { role: 'troll', when: '!coinTaken', delay: 18, text: '가운데 반짝이는 거 뭐임? 주워봐 ㅋㅋ', dona: 1000 },
-      { role: 'troll', when: 'tabletClean', delay: 7, text: '바위 버튼부터 눌러 ㅋㅋ 딱 봐도 그게 1번' },
+      // 방해꾼은 석판이 드러나면 위치로 오답(바위 옆 = 오른쪽 안쪽)을 민다. 한별이 바로 따를 수 있게 위치로 말한다
+      { role: 'troll', when: ['tabletClean', '!p1', '!gateOpen'], delay: 6, text: '오른쪽 안쪽 버튼부터 눌러 ㅋㅋ 딱 봐도 그게 1번', dona: 1000 },
       { role: 'helper', when: ['tabletClean', '!p1', '!gateOpen'], delay: 35, text: '석판 그림 순서대로 버튼 누르는 거 아님?' },
       { role: 'helper', when: ['!tabletClean'], delay: 60, text: '왼쪽 이끼 낀 돌 뭔가 수상한데' },
     ],
@@ -115,20 +112,20 @@ export default {
 
   tutorial: [
     { on: '@start', cards: [
-      { art: 'order', title: '이번엔 직접 해 볼 차례', text: '숲 어딘가에 너만 읽을 수 있는 단서가 숨어 있어. 찾아서 한별에게 순서를 말로 알려 줘.' },
+      { art: 'order', title: '이번엔 직접 해 볼 차례', text: '숲 어딘가에 단서가 숨어 있어. 한별은 단서를 읽어도 그게 어느 버튼인지 몰라. 네 눈으로 보고 "나무 옆 버튼은 왼쪽 거야"처럼 알려 줘.' },
     ] },
   ],
 
   solution: [
     { type: 'interact', target: 'tablet' },
-    { type: 'interact', target: 'btnTree' },
-    { type: 'interact', target: 'btnBush' },
-    { type: 'interact', target: 'btnRock' },
+    { type: 'interact', target: 'btnLeft' },
+    { type: 'interact', target: 'btnFront' },
+    { type: 'interact', target: 'btnBack' },
     { type: 'move', target: 'stoneGate' },
   ],
   tests: [
-    { name: '순서가 틀리면 버튼이 모두 풀린다', actions: [{ type: 'interact', target: 'btnTree' }, { type: 'interact', target: 'btnRock' }], expect: { flag: ['!p1', '!gateOpen'] } },
-    { name: '바위 버튼부터 누르면 안 열린다', actions: [{ type: 'interact', target: 'btnRock' }, { type: 'interact', target: 'btnTree' }, { type: 'interact', target: 'btnBush' }], expect: { flag: ['p2', '!gateOpen'] } },
-    { name: '석판을 안 닦아도 순서만 맞으면 열린다(단서는 도움일 뿐)', actions: [{ type: 'interact', target: 'btnTree' }, { type: 'interact', target: 'btnBush' }, { type: 'interact', target: 'btnRock' }, { type: 'interact', target: 'stoneGate' }], expect: { cleared: true } },
+    { name: '순서가 틀리면 버튼이 모두 풀린다', actions: [{ type: 'interact', target: 'btnLeft' }, { type: 'interact', target: 'btnBack' }], expect: { flag: ['!p1', '!gateOpen'] } },
+    { name: '바위 옆(오른쪽 안쪽) 버튼부터 누르면 안 열린다', actions: [{ type: 'interact', target: 'btnBack' }, { type: 'interact', target: 'btnLeft' }, { type: 'interact', target: 'btnFront' }], expect: { flag: ['p2', '!gateOpen'] } },
+    { name: '석판을 안 닦아도 순서만 맞으면 열린다(단서는 도움일 뿐)', actions: [{ type: 'interact', target: 'btnLeft' }, { type: 'interact', target: 'btnFront' }, { type: 'interact', target: 'btnBack' }, { type: 'interact', target: 'stoneGate' }], expect: { cleared: true } },
   ],
 };

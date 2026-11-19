@@ -86,7 +86,7 @@ for (const stage of targets) {
       if (cmd === 'take' && !itemNames.has(arg)) E(`${w}: take '${arg}' — items에 없는 이름`);
       if (cmd === 'goto') areaEntry(arg, w);
       if (cmd === 'enemy' && !stage.enemies?.[arg]) E(`${w}: 없는 적 '${arg}'`);
-      if (!['set', 'unset', 'give', 'take', 'goto', 'enemy', 'die', 'clear', 'ask', 'checkpoint'].includes(cmd)) E(`${w}: 모르는 명령 '${d}'`);
+      if (!['set', 'unset', 'give', 'take', 'goto', 'enemy', 'die', 'clear', 'ask', 'checkpoint', 'puff', 'pop'].includes(cmd)) E(`${w}: 모르는 명령 '${d}'`);
       if (cmd === 'set') setFlags.add(arg);
     }
   };

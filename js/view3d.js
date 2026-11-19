@@ -7,7 +7,8 @@
      render(stage, state)                      상태(플래그)에 맞춰 오브젝트 모습을 바꾼다
      moveTo(objSpec) / act(kind, objSpec)      걸어가기 / 손 동작        (Promise)
      transition(fn)                            화면을 어둡게 했다가 fn 실행 후 밝힌다 (Promise)
-     enemy(enemySpec, objSpec) / fall()        적 등장·공격 / 쓰러지기   (Promise) */
+     enemy(enemySpec, objSpec) / fall()        적 등장·공격 / 쓰러지기   (Promise)
+     puff(objSpec) / pop(objSpec)              촛불이 잠깐 붙었다 꺼짐 / 깜짝 장난감이 튀어나옴 (Promise) */
 import * as THREE from 'three';
 import { $ } from './ui.js';
 import { S, model, place, ownMaterials, clips } from './assets.js';
@@ -31,7 +32,9 @@ const scene = new THREE.Scene();
 const camera = new THREE.PerspectiveCamera(70, 16 / 9, 0.01, 80);
 scene.add(camera);
 const envGroup = new THREE.Group(), objGroup = new THREE.Group(), enemyGroup = new THREE.Group();
-scene.add(envGroup, objGroup, enemyGroup);
+// 소품 편집기(테스트 모드) 전용: 편집 중인 소품과 놓기 전 미리보기. 구역을 새로 만들어도 지우지 않는다(편집기가 관리)
+export const edGroup = new THREE.Group(), ghostGroup = new THREE.Group();
+scene.add(envGroup, objGroup, enemyGroup, edGroup, ghostGroup);
 
 function resize() {
   const w = host.clientWidth, h = host.clientHeight;
@@ -275,6 +278,20 @@ function buildObject(o) {
     });
   }
   if (o.fx?.glow) { e.glow = new THREE.PointLight(o.fx.glow.color, o.fx.glow.intensity ?? 3, 4, 2); e.glow.position.y = 0.8; root.add(e.glow); }
+  if (o.fx?.flame) {
+    // 촛불: 심지마다 물방울 모양 불꽃(바깥 주황 + 안쪽 노랑). 크기(flameS)를 스프링처럼 키우고 줄인다
+    const ms = m.scale ?? S;
+    e.flames = (o.fx.flame.at || [[0, 0.9, 0]]).map(([x, y, z]) => {
+      const f = new THREE.Group(); f.position.set(x * ms, y * ms, z * ms);
+      // 안개·톤매핑을 받지 않아 어두운 방에서도 또렷하게 빛난다
+      const outer = new THREE.Mesh(FLAME_GEO, new THREE.MeshBasicMaterial({ color: 0xff9a30, transparent: true, opacity: 0.9, fog: false, toneMapped: false }));
+      const inner = new THREE.Mesh(FLAME_GEO, new THREE.MeshBasicMaterial({ color: 0xfff2b8, fog: false, toneMapped: false }));
+      inner.scale.set(0.5, 0.6, 0.5); inner.position.y = 0.004; f.add(outer, inner);
+      f.scale.setScalar(0); f.visible = false; root.add(f);
+      return f;
+    });
+    e.flameS = 0; e.flameV = 0; e.flameSize = (o.fx.flame.size ?? 1.3) * ms;
+  }
   if (o.fx?.sparkle) {
     e.sparkles = new THREE.Group(); root.add(e.sparkles);
     const spMat = new THREE.MeshBasicMaterial({ color: 0xfff6b0 });
@@ -285,6 +302,13 @@ function buildObject(o) {
   objGroup.add(root);
   return e;
 }
+
+// 물방울 모양 불꽃(아래가 둥글고 위가 뾰족). 높이 약 0.075m
+const FLAME_GEO = (() => {
+  const pts = [];
+  for (let i = 0; i <= 12; i++) { const t = i / 12; pts.push(new THREE.Vector2(0.022 * Math.sin(Math.PI * Math.pow(t, 0.7)) * Math.pow(1 - t, 0.35), t * 0.075)); }
+  return new THREE.LatheGeometry(pts, 12);
+})();
 
 /* ── 1인칭 손(한별: 흰 니트 가디건 + 초록 소맷단) ── */
 function makeArm(side) {
@@ -312,7 +336,7 @@ let foe = null, falling = null, shake = 0;
    지나가다 반짝이거나 움직이는 물건이 가까우면 고개를 돌린다(시선 뺏기). */
 let spots = [], autonomy = true, wanderAt = 0, lastNoticeCheck = 0;
 const noticedAt = {};
-const hooks = { notice: () => {}, wander: () => {}, hazard: () => {} };
+const hooks = { notice: () => {}, wander: () => {}, hazard: () => {}, area: () => {} };
 export const onHazard = fn => { hooks.hazard = fn; };   // 주기 위험(굴러오는 바위)에 맞았다
 export const interrupt = () => { finishWalk(); finishAct(); };
 export const onNotice = fn => { hooks.notice = fn; };   // 시선을 뺏긴 오브젝트 id를 알려 준다
@@ -332,6 +356,7 @@ export function loadArea(stage, s, areaId, entryId) {
   if (falling?.done) falling.done();                    // 쓰러지는 연출을 기다리는 쪽이 멈추지 않게 끝내 준다
   falling = null;
   for (const g of [envGroup, objGroup, enemyGroup]) g.clear();
+  pops.length = 0;
   mixers.length = 0;
   for (const k in OBJ) delete OBJ[k];
   const area = stage.areas[areaId];
@@ -339,7 +364,9 @@ export function loadArea(stage, s, areaId, entryId) {
   setHazard(area.hazard);
   setLighting(area.env);
   (area.env.kind === 'outdoor' ? buildOutdoor : buildRoom)(area.env);
-  for (const [p, n, pos, rotY = 0, scale = S] of area.decor || []) place(envGroup, p, n, { pos: lift(pos), rotY, scale });
+  // 스테이지 파일의 decor: 소품 편집기가 숨기고 대신 편집용 복제본을 보여 줄 수 있게 표시해 둔다
+  (area.decor || []).forEach(([p, n, pos, rotY = 0, scale = S], i) => place(envGroup, p, n, { pos: lift(pos), rotY, scale })
+    .then(m => { if (m) { m.userData.decorIdx = i; m.visible = !decorHidden; } }));
   // 자동 꾸미기(js/dress.js): 한별이 다니지 않는 가장자리·경계 밖을 테마 소품으로 채운다
   for (const [p, n, pos, rotY, scale] of dressArea(areaId, area, stage.objects.filter(o => o.area === areaId))) place(envGroup, p, n, { pos: lift(pos), rotY, scale });
   for (const o of stage.objects.filter(o => o.area === areaId)) OBJ[o.id] = buildObject(o);
@@ -353,7 +380,16 @@ export function loadArea(stage, s, areaId, entryId) {
   render(stage, s); resize();
   spots = wanderSpots(area, stage.objects.filter(o => o.area === areaId));
   wanderAt = nextWander(simT); autonomy = true;
+  hooks.area(stage, areaId);
 }
+// 소품 편집기용
+let decorHidden = false;
+export function setDecorHidden(on) {
+  decorHidden = on;
+  envGroup.children.forEach(m => { if (m.userData.decorIdx != null) m.visible = !on; });
+}
+export const liftPos = p => lift(p);
+export const onArea = fn => { hooks.area = fn; };   // 구역을 새로 만들 때마다 알린다
 let curArea = null;
 
 /* ── 주기 위험: 굴러오는 바위 ──
@@ -367,11 +403,29 @@ function setHazard(spec) {
   if (!hz) return;
   // 모델을 그룹으로 감싸 그룹을 굴린다. lie: 세워진 모델(통)을 옆으로 눕혀 굴린다(원점이 바닥인 모델은 halfLen만큼 옮겨 가운데를 맞춘다)
   const g = new THREE.Group(); g.visible = false; envGroup.add(g); hz.mesh = g;
+  if (spec.model.sphere) { g.add(rockBall(spec.radius || 1, spec.model.color)); return; }
   const sc = spec.model.scale ?? 2.4;
   place(g, spec.model.pack, spec.model.name, { scale: sc }).then(m => {
     if (!m || !spec.model.lie) return;
     m.rotation.z = Math.PI / 2; m.position.x = (spec.model.halfLen ?? 1) * sc;
   });
+}
+// 코드로 만드는 둥근 바위(구). 꼭짓점을 조금씩 흔들어 울퉁불퉁한 로우폴리 바위처럼 보이게 한다
+function rockBall(r, color = 0x8f877b) {
+  const geo = new THREE.IcosahedronGeometry(r, 3), p = geo.attributes.position, v = new THREE.Vector3();
+  const seen = new Map();                                // 같은 자리 꼭짓점은 같은 만큼 흔든다(틈이 벌어지지 않게)
+  for (let i = 0; i < p.count; i++) {
+    v.fromBufferAttribute(p, i);
+    const k = `${v.x.toFixed(3)},${v.y.toFixed(3)},${v.z.toFixed(3)}`;
+    if (!seen.has(k)) seen.set(k, 1 + (Math.sin(v.x * 3.1 + v.y * 1.7) * Math.cos(v.z * 2.3 - v.y) * 0.07) + (Math.random() - 0.5) * 0.05);
+    v.multiplyScalar(seen.get(k)); p.setXYZ(i, v.x, v.y, v.z);
+  }
+  geo.computeVertexNormals();
+  const m = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color, roughness: 1, flatShading: true }));
+  // 굴러가는 게 보이도록 이끼 낀 띠를 하나 두른다
+  const band = new THREE.Mesh(new THREE.TorusGeometry(r * 0.97, r * 0.09, 6, 24), new THREE.MeshStandardMaterial({ color: 0x5f7046, roughness: 1, flatShading: true }));
+  band.rotation.y = Math.PI / 2; m.add(band);
+  return m;
 }
 export const hazardStatus = () => hz?.phase || null;
 function stepHazard(dt) {
@@ -390,7 +444,8 @@ function stepHazard(dt) {
   if (phase !== 'roll') return;
   const p = (hz.t - warn) / roll, z = H.from + (H.to - H.from) * p, r = H.radius || 1;
   hz.mesh.position.set(H.x || 0, gy(z) + (H.lift ?? 0), z);
-  hz.mesh.rotation.x -= ((H.speed || 8) * dt) / r * Math.sign(H.to - H.from);
+  // 구르는 방향: 앞(+z)으로 굴러올 때 윗면이 앞으로 넘어오도록 x축 기준 + 회전(카메라 쪽에서 보면 반시계)
+  hz.mesh.rotation.x += ((H.speed || 8) * dt) / r * Math.sign(H.to - H.from);
   const c = camera.position;
   if (!hz.hit && Math.abs(z - c.z) < r + 0.3 && Math.abs(c.x - (H.x || 0)) < (H.lane || 3) / 2) {
     hz.hit = true; shake = 0.6;
@@ -433,7 +488,7 @@ export function render(stage, s) {
     e.target = on(o.openWhen) || on(o.downWhen) ? 1 : 0;
     e.sunk = on(o.sinkWhen); e.revealed = !o.label?.showIf || on(o.label.showIf);
     if (e.armMat) { const shiny = on(o.shinyWhen); e.armMat.color.set(shiny ? 0xd5dbe6 : 0x9a6a48); e.armMat.metalness = shiny ? 0.9 : 0.3; }
-    e.fxOff = { glow: on(o.fx?.glow?.offWhen), sparkle: on(o.fx?.sparkle?.offWhen) };
+    e.fxOff = { glow: on(o.fx?.glow?.offWhen), sparkle: on(o.fx?.sparkle?.offWhen), flame: on(o.fx?.flame?.offWhen) };
   }
 }
 
@@ -499,6 +554,43 @@ export async function enemy(spec, objSpec) {
   shake = 0.5; $('hit').classList.add('on'); setTimeout(() => $('hit').classList.remove('on'), 450);
   await wait(250);
 }
+// 촛불이 잠깐 붙었다 꺼진다(순서가 틀렸을 때). 붙는 모습을 보여 준 뒤 끝나고, 꺼지는 건 이어지는 render가 한다
+export function puff(o) {
+  const e = OBJ[o?.id]; if (!e) return Promise.resolve();
+  e.puffUntil = simT + 0.9;
+  return wait(900);
+}
+// 가짜 문: 문 한가운데에서 용수철 달린 오리 인형이 뿅 튀어나왔다가 들어간다
+const pops = [];
+export async function pop(o) {
+  const e = OBJ[o?.id]; if (!e) return;
+  const g = new THREE.Group();
+  g.position.set(...lift(o.pos)); g.position.y += o.popY ?? 1.25; g.rotation.y = o.rotY || 0;
+  const arm = new THREE.Group(); g.add(arm);
+  // 용수철(나선 관): 길이 1(z 방향)을 arm.scale.z로 늘였다 줄인다
+  const helix = new THREE.Curve(); helix.getPoint = (t, out = new THREE.Vector3()) => out.set(Math.cos(t * 28) * 0.07, Math.sin(t * 28) * 0.07, t);
+  arm.add(new THREE.Mesh(new THREE.TubeGeometry(helix, 160, 0.012, 6), mat(0xd8d8d8, { metalness: 0.7, roughness: 0.3 })));
+  const head = new THREE.Group(); g.add(head);
+  const plate = new THREE.Mesh(new THREE.CylinderGeometry(0.16, 0.16, 0.03, 20), mat(0xe8453c)); plate.rotation.x = Math.PI / 2; head.add(plate);
+  place(head, 'bath', 'ducky', { scale: 1.9, pos: [0, -0.18, 0.05] });
+  envGroup.add(g);
+  const p = { g, arm, head, t: 0, len: o.popLen ?? 1.1 };
+  pops.push(p); shake = Math.max(shake, 0.15);
+  await wait(1800);
+  envGroup.remove(g); const i = pops.indexOf(p); if (i >= 0) pops.splice(i, 1);
+}
+function stepPops(dt) {
+  for (const p of pops) {
+    p.t += dt;
+    const t = p.t;
+    // 0~0.15초: 뿅 튀어나옴(살짝 넘침) → 1.3초까지 흔들흔들 → 0.3초 동안 들어감
+    const out = t < 0.15 ? (t / 0.15) * 1.15 : t < 0.3 ? 1.15 - (t - 0.15) / 0.15 * 0.15 : t < 1.3 ? 1 : Math.max(0, 1 - (t - 1.3) / 0.3);
+    const L = Math.max(0.001, out * p.len);
+    p.arm.scale.z = L; p.head.position.z = L;
+    const wob = t > 0.15 && t < 1.3 ? Math.sin(t * 22) * 0.35 * Math.exp(-(t - 0.15) * 2.2) : 0;
+    p.head.rotation.z = wob; p.head.position.x = wob * 0.12;
+  }
+}
 export function fall() {
   arms.r.visible = arms.l.visible = false;
   return new Promise(done => { falling = { t: 0, done }; });
@@ -526,7 +618,12 @@ const typing = e => /^(INPUT|TEXTAREA|SELECT)$/.test(e.target.tagName);
 addEventListener('keydown', e => { if (freeCam && !typing(e)) { keys.add(e.code); if (/^(Space|KeyW|KeyA|KeyS|KeyD)$/.test(e.code)) e.preventDefault(); } });
 addEventListener('keyup', e => keys.delete(e.code));
 addEventListener('blur', () => keys.clear());
-renderer.domElement.addEventListener('click', () => { if (freeCam && !document.pointerLockElement) renderer.domElement.requestPointerLock?.(); });
+export const canvas = renderer.domElement;
+let clickLock = true;                               // 소품 편집기는 클릭을 '놓기'에 쓰므로 끈다
+export const setClickLock = v => { clickLock = v; if (!v && document.pointerLockElement) document.exitPointerLock(); };
+renderer.domElement.addEventListener('click', () => { if (freeCam && clickLock && !document.pointerLockElement) renderer.domElement.requestPointerLock?.(); });
+// 마우스를 잠그지 않고 시점 돌리기(소품 편집기의 오른쪽 드래그)
+export function turnView(dx, dy) { yaw -= dx * 0.0035; pitch = THREE.MathUtils.clamp(pitch - dy * 0.0035, -1.45, 1.45); }
 addEventListener('mousemove', e => {
   if (!freeCam || document.pointerLockElement !== renderer.domElement) return;
   yaw -= e.movementX * 0.0025; pitch = THREE.MathUtils.clamp(pitch - e.movementY * 0.0025, -1.45, 1.45);
@@ -544,9 +641,12 @@ function stepFree(dt) {
 }
 // 조준점(화면 한가운데)이 가리키는 곳: 좌표와 맞은 것(오브젝트면 id)
 const ray = new THREE.Raycaster(), center = new THREE.Vector2(0, 0);
-export function probe() {
-  ray.setFromCamera(center, camera);
-  const hit = ray.intersectObjects([objGroup, envGroup], true).find(h => h.object.visible && h.object.type === 'Mesh');
+const shown = o => { for (; o; o = o.parent) if (!o.visible) return false; return true; };   // 부모까지 모두 보이는가
+export function probe(ndc) {                         // ndc: 화면 좌표(-1~1). 없으면 화면 한가운데(조준점)
+  ray.setFromCamera(ndc || center, camera);
+  const hit = ray.intersectObjects([objGroup, envGroup, edGroup], true).find(h => h.object.type === 'Mesh' && shown(h.object));
+  let edIdx = null;
+  for (let o = hit?.object; o; o = o.parent) if (o.userData.edIdx != null) { edIdx = o.userData.edIdx; break; }
   const c = camera.position, r2 = n => Math.round(n * 100) / 100;
   let obj = null;
   if (hit) for (let o = hit.object; o && !obj; o = o.parent) for (const [id, e] of Object.entries(OBJ)) if (e.root === o) obj = id;
@@ -554,7 +654,7 @@ export function probe() {
   const p = hit?.point;
   return {
     cam: [r2(c.x), r2(c.y - gy(c.z)), r2(c.z)], yaw: r2(yaw),
-    hit: p ? [r2(p.x), r2(p.y - gy(p.z)), r2(p.z)] : null, obj,
+    hit: p ? [r2(p.x), r2(p.y - gy(p.z)), r2(p.z)] : null, obj, edIdx,
     model: (() => { for (let o = hit?.object; o; o = o.parent) if (o.userData.model) return o.userData.model; return ''; })(),
     dist: hit ? r2(hit.distance) : null,
   };
@@ -622,6 +722,7 @@ function step(maxDt) {
   }
 
   stepHazard(dt);
+  stepPops(dt);
 
   // 시선
   const target = foe ? v3(foe.root.position.x, 1.2, foe.root.position.z) : glance ? glance.at : focus;
@@ -670,7 +771,24 @@ function step(maxDt) {
     if (e.cap) e.cap.position.y = 0.86 - 0.08 * e.open;
     if (o.sinkWhen) { e.sink = ease(e.sink || 0, e.sunk ? 1 : 0, 1.2); e.root.position.y = lift(o.pos)[1] - (o.sinkDepth || 3) * e.sink; }
     if (e.cover) e.cover.visible = !e.revealed;
-    const glowOn = e.fxOff ? !e.fxOff.glow && !(o.kind === 'chest' && e.open > 0.5) : true;
+    const puffing = e.puffUntil > t;
+    const glowOn = puffing || (e.fxOff ? !e.fxOff.glow && !(o.kind === 'chest' && e.open > 0.5) : true);
+    if (e.flames) {
+      // 켜짐: 커지다가 살짝 넘친 뒤 멈춤 / 꺼짐: 줄어들며 사라짐(스프링)
+      const want = puffing || !e.fxOff?.flame ? 1 : 0;
+      for (let rem = dt; rem > 1e-6; rem -= 1 / 120) {          // 프레임 간격이 커도 튀지 않게 잘게 나눠 계산
+        const h = Math.min(rem, 1 / 120);
+        e.flameV += ((want - e.flameS) * 90 - e.flameV * 11) * h;
+        e.flameS += e.flameV * h;
+        if (e.flameS < 0) { e.flameS = 0; e.flameV = 0; }
+      }
+      e.flames.forEach((f, i) => {
+        const fl = 1 + Math.sin(t * 13 + i * 2.1) * 0.08 + Math.sin(t * 7.3 + i) * 0.05;   // 일렁임
+        f.visible = e.flameS > 0.01;
+        f.scale.set(e.flameS * e.flameSize, e.flameS * e.flameSize * fl, e.flameS * e.flameSize);
+        f.rotation.z = Math.sin(t * 5 + i) * 0.08;
+      });
+    }
     if (e.glow) e.glow.intensity = glowOn ? (o.fx.glow.intensity ?? 3) * (0.8 + Math.sin(t * 4) * 0.35) : 0;
     for (const m of e.mats) m.emissiveIntensity = glowOn ? 0.6 + Math.sin(t * 4) * 0.35 : 0;
     if (e.sparkles) {
@@ -692,3 +810,4 @@ resize();
 requestAnimationFrame(frame);
 // 개발용: 주소에 ?shot 이 있으면 지금 화면을 JPEG 데이터로 돌려주는 함수를 연다(화면 검증 자동화)
 if (new URLSearchParams(location.search).has('shot')) window.__shot = () => { renderer.render(scene, camera); return renderer.domElement.toDataURL('image/jpeg', 0.85); };
+if (new URLSearchParams(location.search).has("shot")) { window.__obj = OBJ; window.__hz = () => hz; window.__pops = pops; }   // 개발용: 오브젝트·위험 상태 확인
