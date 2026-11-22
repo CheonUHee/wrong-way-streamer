@@ -820,4 +820,4 @@ resize();
 requestAnimationFrame(frame);
 // 개발용: 주소에 ?shot 이 있으면 지금 화면을 JPEG 데이터로 돌려주는 함수를 연다(화면 검증 자동화)
 if (hasFlag('shot')) window.__shot = () => { renderer.render(scene, camera); return renderer.domElement.toDataURL('image/jpeg', 0.85); };
-if (hasFlag("shot")) { window.__obj = OBJ; window.__hz = () => hz; window.__pops = pops; window.__view = (pos, look, h = 0) => { viewFrom(pos, look); fly = h; }; }   // 개발용: 오브젝트·위험 상태 확인
+if (hasFlag("shot")) { window.__obj = OBJ; window.__hz = () => hz; window.__pops = pops; window.__view = (pos, look, h = 0) => { viewFrom(pos, look); fly = h; }; window.__arms = v => { arms.r.visible = arms.l.visible = v; }; }   // 개발용: 오브젝트·위험 상태 확인

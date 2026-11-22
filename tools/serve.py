@@ -1,6 +1,7 @@
 """개발용 정적 서버: 캐시를 끈다(수정한 스테이지 파일이 새로고침만으로 바로 반영되게).
 소품 편집기(테스트 모드)의 '파일에 저장'도 받는다: POST /__decor → js/stages/<id>.js 의 구역 decor 배열을 고쳐 쓴다.
 스트리머 이미지 변환기(tools/sprites.html)의 저장도 받는다: POST /__sprite?name=normal1 → assets/sprites/normal1.webp
+플레이 가이드 화면 캡처(js/guideshots.js, ?shot)의 저장: POST /__guide?name=room1 → assets/guide/room1.webp
 사용: python tools/serve.py [포트=8080]"""
 import http.server, json, os, re, sys
 
@@ -77,6 +78,8 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def do_POST(self):
         if self.path.startswith('/__sprite?name='):
             return self.save_sprite(self.path.split('=', 1)[1])
+        if self.path.startswith('/__guide?name='):
+            return self.save_sprite(self.path.split('=', 1)[1], 'assets/guide')
         if self.path != '/__decor':
             return self.send_error(404)
         try:
@@ -91,12 +94,12 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         self.end_headers(); self.wfile.write(data)
 
     # 스트리머 이미지 변환기(tools/sprites.html)가 만든 웹용 이미지를 assets/sprites/<이름>.webp 로 저장
-    def save_sprite(self, name):
+    def save_sprite(self, name, folder='assets/sprites'):
         data = self.rfile.read(int(self.headers.get('Content-Length', 0)))
         if not re.fullmatch(r'[a-z]+\d*', name) or not data.startswith(b'RIFF'):
             return self.send_error(400, 'bad sprite')
-        os.makedirs('assets/sprites', exist_ok=True)
-        with open(f'assets/sprites/{name}.webp', 'wb') as f:
+        os.makedirs(folder, exist_ok=True)
+        with open(f'{folder}/{name}.webp', 'wb') as f:
             f.write(data)
         self.send_response(200); self.send_header('Content-Length', '0'); self.end_headers()
 

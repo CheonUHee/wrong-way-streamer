@@ -78,7 +78,12 @@ export function perform(a) {
   if (canInterrupt()) stopWalk();
   if (busy) return '아직 앞의 행동이 끝나지 않았다';
   before = snapshot(S);
+  const f0 = { ...S.flags };
   const { result, effects } = core.perform(stage, S, a);
+  // 상태를 바꾼 결과(버튼 눌림·풀림, 문 열림 등)는 [지금까지 해낸 일]로 따로 기억한다. 바꾼 플래그도 함께 적어 두고,
+  // 그 플래그가 지금도 그대로일 때만 AI에게 보여 준다(걷다 멈춰 취소됨·순서가 틀려 풀림·쓰러져 되돌아감이면 저절로 빠진다)
+  const set = Object.keys(S.flags).filter(k => S.flags[k] && !f0[k]), unset = Object.keys(f0).filter(k => f0[k] && !S.flags[k]);
+  if (set.length || unset.length) S.done = [...(S.done || []), { text: result, set, unset }].slice(-8);
   busy = true;
   const st = S, token = ++playToken;
   playing = play(effects, st, token).catch(e => console.error(e)).finally(() => { if (st === S && token === playToken) { busy = false; before = null; tutorial.check(); } });
@@ -104,6 +109,7 @@ async function play(effects, st, token) {
     else if (e.type === 'enemy') await view.enemy(stage.enemies[e.enemy], spec(e.obj));
     else if (e.type === 'puff') await view.puff(spec(e.obj));
     else if (e.type === 'pop') await view.pop(spec(e.obj));
+    else if (e.type === 'react') { const line = e.lines[Math.floor(Math.random() * e.lines.length)]; setTimeout(() => { if (st === S) { say(line, e.emo, 3000); S.history.push(`한별(나, 깜짝 반응): ${line}`); } }, 250); }   // 다음 연출(튀어나옴)과 거의 동시에. AI 기록에도 남긴다
     else if (e.type === 'die') await dieAndRespawn(e.reason);
     else if (e.type === 'clear') await onClear();
   }

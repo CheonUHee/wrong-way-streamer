@@ -2,8 +2,9 @@
 import { $, esc, addLine, viewerLine, say, donate, setFace, drawBubble, chatNoise, markRead } from './ui.js';
 import * as viewers from './viewers.js';
 import { isPaused, whenResumed, onResume, isTest, onTest } from './pause.js';
-import { flag } from './env.js';
+import { flag, hasFlag } from './env.js';
 import './testmode.js';
+if (hasFlag('shot')) import('./guideshots.js');   // 개발 전용: 플레이 가이드 그림용 화면 캡처
 import { state, current, isBusy, canInterrupt, perform, startFromUrl, restartStage, hazardNow, onReward } from './stage.js';
 import { EMOS, SYSTEM, aiOn, buildPrompt, callGemini, mockBrain, setOnConfigChange } from './ai.js';
 
@@ -13,11 +14,8 @@ function applyTurn(out, msgs) {
   const line = String(out.line || '...').slice(0, 80);
   say(line, emo);
   const st0 = state(), wasAsking = st0.asking && (msgs.length || Date.now() - (st0.askedAt || 0) >= 30000);
-  const flags0 = JSON.stringify(st0.flags);
   const result = perform({ type: String(a.type || 'idle'), target: a.target, item: a.item });
   const S = state();
-  // 상태를 바꾼 결과(버튼 눌림·풀림, 문 열림 등)는 따로 기억한다. 이미 한 일을 또 하러 가지 않게(Gemini 플레이테스트)
-  if (S === st0 && JSON.stringify(S.flags) !== flags0) S.done = [...(S.done || []), result].slice(-6);
   S.last = result; S.noticed = null;                          // 눈에 띈 것은 한 번 전달하면 잊는다
   if (wasAsking && S.asking === st0.asking) S.asking = null;   // 대답을 들었거나 기다리다 지쳤다(이번 행동이 새로 물은 건 남긴다)
   msgs.forEach(m => S.history.push(`${m.nick}(${m.kind === 'dona' ? '후원' : '채팅'}): ${m.text}`));

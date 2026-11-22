@@ -154,6 +154,8 @@ function applyDo(stage, s, list, effects, o) {
     // puff: 화면 연출만. 대상(촛대)에 불이 잠깐 붙었다가 꺼진다(오답이어도 '붙긴 붙었다'가 보이게). 규칙 판정에는 영향 없음
     // pop: 화면 연출만. 대상(가짜 문)에서 깜짝 장난감이 튀어나왔다 들어간다
     else if (cmd === 'puff' || cmd === 'pop') effects.push({ type: cmd, obj: o?.id });
+    // react:감정:대사1|대사2 — 화면 연출만. 그 순간 한별의 표정과 말풍선(후보 중 하나)이 바로 바뀐다(AI 턴을 기다리지 않는 즉각 반응)
+    else if (cmd === 'react') { const i = arg.indexOf(':'); effects.push({ type: 'react', emo: arg.slice(0, i), lines: arg.slice(i + 1).split('|') }); }
   }
 }
 
@@ -188,7 +190,7 @@ export function promptContext(stage, s) {
     last: s.last,
     noticed: n ? `${n.id}: ${describe(s, n)}` : '',
     history: s.history.join('\n') || '없음',
-    done: (s.done || []).map(d => `- ${d}`).join('\n'),
+    done: (s.done || []).filter(d => d.set.every(f => s.flags[f]) && d.unset.every(f => !s.flags[f])).slice(-6).map(d => `- ${d.text}`).join('\n'),
     heard: (s.heard || []).map((h, i, a) => i === a.length - 1 && a.length > 1 ? `${h}  ← 가장 최근` : h).join('\n'),
     deaths: s.deaths.length
       ? s.deaths.map((d, i) => `- ${i + 1}번째: ${areaName(stage, d.area)}의 ${d.obj} 쪽에서 ${d.reason} → 배운 것: ${lessonOf(stage, d)}`).join('\n')
