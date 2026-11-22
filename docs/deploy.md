@@ -21,7 +21,8 @@
    - Framework Preset: `Other` · Build Command: 비움 · Output Directory: 비움(저장소 최상위를 그대로 올림)
 4. **환경 변수에 키 넣기**: 프로젝트 Settings → Environment Variables
    - `GEMINI_API_KEY` = 1번에서 만든 키 (Production 체크)
-   - 선택: `RATE_PER_MIN`(IP마다 분당 요청 수, 기본 20) · `GEMINI_MODEL`(기본 gemini-3.1-flash-lite) · `ALLOWED_ORIGINS`(따로 연결한 도메인)
+   - 선택(안 넣으면 기본값으로 동작하므로 보통은 필요 없다): 같은 화면에서 `GEMINI_API_KEY`를 넣을 때처럼 이름(Key)과 값(Value)을 직접 적어 추가한다
+     `RATE_PER_MIN`(IP마다 분당 요청 수, 기본 40) · `GEMINI_MODEL`(기본 gemini-3.1-flash-lite) · `ALLOWED_ORIGINS`(vercel.app 말고 따로 산 도메인을 연결했을 때만)
    - 키를 넣거나 바꾼 뒤에는 Deployments → 최신 배포 → Redeploy
 5. **확인**: 배포된 주소(예: `https://wrong-way-streamer.vercel.app`)를 열고 채팅을 보내 한별이 대답하는지 본다
 

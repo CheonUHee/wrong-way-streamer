@@ -4,16 +4,16 @@
    남용을 막는 장치
    - 이 사이트(같은 주소)와 ALLOWED_ORIGINS 에 적은 주소에서 온 요청만 받는다
    - 모델은 서버가 정한다(GEMINI_MODEL, 기본 gemini-3.1-flash-lite). 브라우저가 보낸 모델 이름은 쓰지 않는다
-   - 요청 크기 제한, 출력 토큰 상한(400), IP마다 분당 요청 수 제한(RATE_PER_MIN, 기본 20)
+   - 요청 크기 제한, 출력 토큰 상한(400), IP마다 분당 요청 수 제한(RATE_PER_MIN, 기본 40)
      분당 제한은 서버 인스턴스 메모리에 세므로 대략적인 방어다. 진짜 상한은 Google 쪽 무료 등급 한도·예산 설정이 맡는다
 
    환경 변수(Vercel → Project → Settings → Environment Variables)
    - GEMINI_API_KEY (필수)
    - GEMINI_MODEL, RATE_PER_MIN, ALLOWED_ORIGINS(쉼표로 구분, 예: https://내도메인.com) — 선택 */
 const MODEL = process.env.GEMINI_MODEL || 'gemini-3.1-flash-lite';
-const RATE = Number(process.env.RATE_PER_MIN || 20);
+const RATE = Number(process.env.RATE_PER_MIN || 40);   // 게임은 보통 분당 8~15번 부른다. 채팅을 연달아 보내면(1.5초 간격) 분당 40번까지 갈 수 있다
 const ALLOWED = (process.env.ALLOWED_ORIGINS || '').split(',').map(s => s.trim()).filter(Boolean);
-const MAX_BODY = 24000;              // 시스템 지시 + 프롬프트(보통 6~10KB)
+const MAX_BODY = 24000;              // 시스템 지시 + 프롬프트 글자 수(실측 약 4천~6천 자)
 const hits = new Map();              // ip → 최근 1분 요청 시각들
 
 const fail = (res, code, message) => res.status(code).json({ error: { message } });
