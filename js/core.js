@@ -54,7 +54,11 @@ export function describe(s, o) {
   for (const d of o.desc) { if (typeof d === 'string') return d; if (all(s, d[0])) return d[1]; }
   return '';
 }
-const josa = (word, a, b) => { const c = word.charCodeAt(word.length - 1) - 0xac00; return c >= 0 && c < 11172 && c % 28 ? a : b; };
+const josa = (word, a, b) => {
+  const c = word.charCodeAt(word.length - 1) - 0xac00, jong = c >= 0 && c < 11172 ? c % 28 : 0;
+  if (a === '으로' && jong === 8) return b;          // 받침이 ㄹ이면 '로'(오솔길로, 출구로)
+  return jong ? a : b;
+};
 
 /* ── 행동 처리 ──
    규칙(rule) 형식: { target, on, item, if, do, say }

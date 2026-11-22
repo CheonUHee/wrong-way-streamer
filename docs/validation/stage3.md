@@ -1,6 +1,6 @@
 # 검증 결과: 바위 굴러오는 골짜기
 
-2026-11-19 · node tools/validate.mjs stage3
+2026-11-22 · node tools/validate.mjs stage3
 
 - 정답 경로 10수로 클리어 ✔
 - 테스트 통과 ✔ 레버 없이는 철창문이 안 열린다

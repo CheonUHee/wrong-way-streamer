@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<title>스트리머 이미지 변환기</title>
+<style>
+  body { margin: 0; padding: 20px; background: #16181f; color: #e8eaf0; font: 14px/1.5 'Malgun Gothic', sans-serif; }
+  h1 { font-size: 18px; margin: 0 0 6px; }
+  p { color: #8b90a0; margin: 0 0 12px; }
+  button { background: #ffe14a; border: 0; border-radius: 8px; padding: 8px 18px; font-weight: 800; cursor: pointer; }
+  #log { margin: 10px 0; white-space: pre-wrap; color: #7be08a; }
+  .row { display: flex; gap: 6px; flex-wrap: wrap; margin: 8px 0 16px; align-items: flex-end; }
+  .row b { width: 60px; }
+  figure { margin: 0; text-align: center; font-size: 11px; color: #8b90a0; }
+  figure img { display: block; width: 125px; background: repeating-conic-gradient(#2a2e38 0 25%, #20232b 0 50%) 0 0 / 16px 16px; border-radius: 6px; }
+  figure img.avatar { width: 64px; border-radius: 50%; }
+</style>
+</head>
+<body>
+<h1>스트리머 이미지 변환기</h1>
+<p>assets/streamer/&lt;감정&gt;/&lt;감정&gt;N.png 원본을 잘라 줄이고 WebP로 바꿔 assets/sprites/ 에 저장합니다. 개발 서버(python tools/serve.py 8080)에서 열어야 저장됩니다.</p>
+<button id="go">변환해서 저장</button>
+<div id="log"></div>
+<div id="out"></div>
+<script>
+/* ── 설정 ── */
+const SRC = '../assets/streamer';
+const EMOS = ['normal', 'happy', 'sad', 'angry', 'shout', 'think'];
+// 원본(1024×1536)에서 위 20%를 잘라 5:6으로 만든다(제작 지침의 구도 그대로)
+const CROP = { x: 0, y: 307, w: 1024, h: 1229 };
+const OUT = { w: 500, h: 600, quality: 0.86 };
+// 장마다 가로 위치 보정(원본 px, +는 오른쪽). angry가 좌우로 크게 흔들려 흔들림을 절반쯤으로 줄인다
+//   angry2 원래 -40px → -16px, angry3 원래 +17px → +7px
+const SHIFT = { angry2: 24, angry3: -10 };
+// 방송 정보의 프로필 사진: normal1에서 눈과 머리카락만(원본 px 기준 정사각형)
+const AVATAR = { from: 'normal1', x: 285, y: 430, s: 520, out: 128 };
+
+const log = t => (document.getElementById('log').textContent += t + '\n');
+const load = src => new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = src; });
+const toWebp = cv => new Promise(ok => cv.toBlob(ok, 'image/webp', OUT.quality));
+
+function draw(im, name) {
+  const cv = Object.assign(document.createElement('canvas'), { width: OUT.w, height: OUT.h });
+  const g = cv.getContext('2d');
+  g.imageSmoothingQuality = 'high';
+  const k = OUT.w / CROP.w, dx = (SHIFT[name] || 0) * k;
+  g.drawImage(im, CROP.x, CROP.y, CROP.w, CROP.h, dx, 0, OUT.w, OUT.h);
+  // 원본의 몸이 살짝 비쳐 보이는(알파 250 안팎) 부분을 완전히 불투명하게
+  const d = g.getImageData(0, 0, OUT.w, OUT.h), a = d.data;
+  for (let i = 3; i < a.length; i += 4) if (a[i] >= 236) a[i] = 255;
+  g.putImageData(d, 0, 0);
+  return cv;
+}
+function avatar(im) {
+  const cv = Object.assign(document.createElement('canvas'), { width: AVATAR.out, height: AVATAR.out });
+  const g = cv.getContext('2d'); g.imageSmoothingQuality = 'high';
+  g.drawImage(im, AVATAR.x, AVATAR.y, AVATAR.s, AVATAR.s, 0, 0, AVATAR.out, AVATAR.out);
+  return cv;
+}
+async function save(name, blob) {
+  const r = await fetch('/__sprite?name=' + name, { method: 'POST', body: blob });
+  if (!r.ok) throw new Error(name + ' 저장 실패: ' + r.status);
+}
+function show(row, name, blob, cls = '') {
+  const f = document.createElement('figure');
+  f.innerHTML = `<img class="${cls}" src="${URL.createObjectURL(blob)}"><figcaption>${name} · ${(blob.size / 1024).toFixed(0)}KB</figcaption>`;
+  row.appendChild(f);
+}
+
+document.getElementById('go').onclick = async () => {
+  document.getElementById('out').innerHTML = ''; document.getElementById('log').textContent = '';
+  const counts = {}; let total = 0;
+  for (const emo of EMOS) {
+    const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<b>${emo}</b>`;
+    document.getElementById('out').appendChild(row);
+    let n = 0;
+    for (;;) {
+      const name = emo + (n + 1);
+      let im; try { im = await load(`${SRC}/${emo}/${name}.png`); } catch { break; }
+      const blob = await toWebp(draw(im, name));
+      await save(name, blob); show(row, name, blob); total += blob.size; n++;
+      if (name === AVATAR.from) { const b = await toWebp(avatar(im)); await save('avatar', b); show(row, 'avatar', b, 'avatar'); }
+    }
+    counts[emo] = n;
+  }
+  log(`저장 완료: ${Object.values(counts).reduce((s, v) => s + v, 0)}장, ${(total / 1024 / 1024).toFixed(2)}MB`);
+  log('장 수: ' + JSON.stringify(counts) + '  → 장 수가 바뀌었으면 js/ui.js 의 SPRITES.frames 를 맞춰 주세요');
+};
+</script>
+</body>
+</html>

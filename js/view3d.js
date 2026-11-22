@@ -136,6 +136,15 @@ function buildOutdoor(env) {
     const p = new THREE.Mesh(new THREE.PlaneGeometry(env.path, d * Math.hypot(1, slope)), mat(env.pathColor || 0x8a7356));
     p.rotation.x = -Math.PI / 2 + Math.atan(slope); p.position.y = 0.01; envGroup.add(p);
   }
+  // 흙길 여러 갈래(평지 전용): env.trails = [[x1, z1, x2, z2, 폭], …]. 갈림길 공터처럼 길이 어디로 나는지 보여 준다
+  for (const [x1, z1, x2, z2, tw = 1.4] of env.trails || []) {
+    const len = Math.hypot(x2 - x1, z2 - z1);
+    const p = new THREE.Mesh(new THREE.PlaneGeometry(tw, len), mat(env.pathColor || 0x8a7356));
+    p.rotation.set(-Math.PI / 2, Math.atan2(x2 - x1, z2 - z1), 0, 'YXZ');   // 눕힌 뒤 길 방향으로 돌린다
+    p.position.set((x1 + x2) / 2, 0.012, (z1 + z2) / 2); envGroup.add(p);
+    const c = new THREE.Mesh(new THREE.CircleGeometry(tw / 2, 16), p.material);   // 끝을 둥글게(갈래가 만나는 곳이 자연스럽게)
+    c.rotation.x = -Math.PI / 2; c.position.set(x1, 0.012, z1); envGroup.add(c);
+  }
   if (env.border === 'cliff') return buildCliffs(env, r);
   const inner = new THREE.Mesh(new THREE.CircleGeometry(Math.min(w, d) * 0.45, 32), mat(new THREE.Color(env.ground || 0x4f6b45).offsetHSL(0, -0.05, 0.04)));
   inner.rotation.x = -Math.PI / 2; inner.position.y = 0.005; envGroup.add(inner);
@@ -143,7 +152,7 @@ function buildOutdoor(env) {
   const seg = 4 * S;
   for (const [name, mk] of Object.entries(SIDES)) {
     const side = mk(w, d);
-    for (const [a, b] of segments(side.len, env.openings?.[name])) {
+    if (env.border !== 'none') for (const [a, b] of segments(side.len, env.openings?.[name])) {
       const n = Math.max(1, Math.round((b - a) / seg)), sc = (b - a) / n / 4;
       for (let i = 0; i < n; i++) {
         const u = a + (b - a) * (i + 0.5) / n;
@@ -155,8 +164,8 @@ function buildOutdoor(env) {
           { pos: at(side, u, 0, side.fixed).toArray(), rotY: side.rotY, scale: sc });
       }
     }
-    // 울타리 밖 나무(배경)
-    for (let u = -side.len / 2 - 2; u <= side.len / 2 + 2; u += 2.6 + r() * 1.5) {
+    // 울타리 밖 나무(배경). env.backdrop === false 면 두지 않는다(구역 꾸미기 dress가 대신 채운다)
+    if (env.backdrop !== false) for (let u = -side.len / 2 - 2; u <= side.len / 2 + 2; u += 2.6 + r() * 1.5) {
       const off = 1.6 + r() * 2.5;
       if ((env.openings?.[name] || []).some(o => Math.abs(u - o.x) < o.w / 2 + 1.2)) continue;   // 통로 너머는 비워 둔다(다음 길이 보이게)
       const tree = env.dim ? ['halloween', r() < 0.5 ? 'tree_dead_large' : 'tree_dead_medium'] : ['forest', ['Tree_1_A_Color1', 'Tree_2_A_Color1', 'Tree_4_A_Color1', 'Tree_3_A_Color1'][Math.floor(r() * 4)]];
@@ -810,4 +819,4 @@ resize();
 requestAnimationFrame(frame);
 // 개발용: 주소에 ?shot 이 있으면 지금 화면을 JPEG 데이터로 돌려주는 함수를 연다(화면 검증 자동화)
 if (new URLSearchParams(location.search).has('shot')) window.__shot = () => { renderer.render(scene, camera); return renderer.domElement.toDataURL('image/jpeg', 0.85); };
-if (new URLSearchParams(location.search).has("shot")) { window.__obj = OBJ; window.__hz = () => hz; window.__pops = pops; }   // 개발용: 오브젝트·위험 상태 확인
+if (new URLSearchParams(location.search).has("shot")) { window.__obj = OBJ; window.__hz = () => hz; window.__pops = pops; window.__view = (pos, look, h = 0) => { viewFrom(pos, look); fly = h; }; }   // 개발용: 오브젝트·위험 상태 확인

@@ -1,6 +1,6 @@
 # 검증 결과: 해골 묘지의 지하 대전당
 
-2026-11-19 · node tools/validate.mjs stage4
+2026-11-22 · node tools/validate.mjs stage4
 
 - 정답 경로 17수로 클리어 ✔
 - 테스트 통과 ✔ 촛불 순서가 틀리면 다 꺼진다

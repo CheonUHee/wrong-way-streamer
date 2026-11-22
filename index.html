@@ -30,8 +30,8 @@
       <div class="toast" id="toast" data-zone="획득 알림"></div>
       <div class="hit" id="hit"></div>
       <div class="fade" id="fade"></div>
-      <div class="clear" id="clear"><span id="clearText">🎉 STAGE CLEAR</span></div>
-      <div class="clear dead" id="dead"><div>💀 한별이 쓰러졌다…</div><small id="deadReason"></small></div>
+      <div class="clear" id="clear"><span id="clearText">STAGE CLEAR</span></div>
+      <div class="clear dead" id="dead"><div>GAME OVER</div><small id="deadReason"></small></div>
 
       <div class="dona" id="dona" data-zone="도네이션 알림">
         <div class="img" id="donaImg">⚡</div>
@@ -60,10 +60,10 @@
     </div>
 
     <div class="info" data-zone="방송 정보">
-      <div class="avatar">⭐</div>
+      <div class="avatar"><img src="assets/sprites/avatar.webp" alt="한별"></div>
       <div class="grow">
         <div class="title">[퍼즐] 오늘은 진짜 한 번에 깬다!! (훈수 환영)</div>
-        <div class="meta"><span class="live">● LIVE</span> · 시청자 <span id="viewers">1,284</span>명 · <span class="uptime"><span id="timer">00:00:00</span> 방송 중</span> · <span id="stageLabel">Stage 1</span></div>
+        <div class="meta"><span class="live">● LIVE</span> · 시청자 <span id="viewers">378</span>명 · <span class="uptime"><span id="timer">00:00:00</span> 방송 중</span> · <span id="stageLabel">Stage 1</span></div>
       </div>
       <button class="pill-btn">♡ 팔로우</button>
     </div>
@@ -104,11 +104,10 @@
 <!-- 플레이어 전용 튜토리얼: 화면 전체를 어둡게 하고, 닫을 때까지 게임이 멈춘다 -->
 <div class="tut" id="tut" role="dialog" aria-modal="true" aria-labelledby="tutTitle">
   <div class="tut-card">
-    <div class="tut-tag">📺 플레이 가이드</div>
+    <div class="tut-tag">플레이 가이드</div>
     <div class="tut-art" id="tutArt"></div>
-    <h3 id="tutTitle"></h3>
-    <p id="tutText"></p>
-    <div class="tut-foot"><span id="tutPage"></span><button id="tutNext">알겠어!</button></div>
+    <div class="tut-body" id="tutBody"><h3 id="tutTitle"></h3><p id="tutText"></p></div>
+    <div class="tut-foot"><button id="tutPrev" class="prev">◀ 이전</button><span id="tutPage"></span><button id="tutNext">확인</button></div>
   </div>
 </div>
 

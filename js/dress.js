@@ -2,7 +2,7 @@
    한별이 다니지 않는 곳(벽·울타리 가장자리, 경계 밖, 절벽 위)을 테마에 맞는 소품으로 빽빽하게 채운다.
    - 규칙·AI에는 아무 영향이 없다(보이기만 한다). 오브젝트·서는 자리·입구·통로 앞은 비워 둔다.
    - 같은 구역은 언제나 같은 모습(구역 id로 정한 난수).
-   - env.dress: 'proto' | 'forest' | 'valley' | 'ruins' | 'crypt' | 'graveyard' | false(끄기). 생략하면 env로 짐작한다.
+   - env.dress: 'proto' | 'forest' | 'crossroad' | 'treeLane' | 'bushLane' | 'pumpkinLane' | 'valley' | 'ruins' | 'crypt' | 'graveyard' | false(끄기). 생략하면 env로 짐작한다.
    - env.dressDensity: 배치 밀도 배율(기본 1).
    결과: decor와 같은 형식 [pack, name, [x, y, z], rotY, scale] 의 배열. (node 검증 도구에서도 쓸 수 있게 three.js를 쓰지 않는다) */
 
@@ -96,6 +96,36 @@ const GEN = {
     along(ALL, 1.6, [-1.2, -2.6], () => [F, pick([...BUSH_BIG, ...PEBBLE]), 0.6, 1.2, 1.9], { ext: 3, outD: 5 });
     along(ALL, 1.0, [0.5, 1.5], () => [F, pick([...BUSH_SMALL, ...BUSH_SMALL, ...PEBBLE, ...GRASS_LOW]), 0.4, 1.0, 1.6]);
     scatter(45, () => [F, pick(GRASS_LOW), 0.25, 0.9, 1.5], { soft: true });
+  },
+  // 숲속 갈림길(스테이지 2 가운데 공터): 숲과 같지만 안쪽 가장자리에 덤불을 두지 않는다(덤불 길과 헷갈리지 않게)
+  crossroad({ along, scatter, pick }) {
+    along(ALL, 2.4, [-2.2, -3.4], () => [F, pick(TREES), 1.2, 0.85, 1.2], { ext: 4, outD: 5 });
+    along(ALL, 2.6, [-4.6, -6.4], () => [F, pick(TREES), 1.2, 1.0, 1.45], { ext: 7, outD: 7 });
+    along(ALL, 3.0, [-7.5, -10], () => [F, pick(TREES), 1.2, 1.1, 1.6], { ext: 10, overlap: true, outD: 20 });
+    along(ALL, 1.2, [0.4, 1.4], () => [F, pick(GRASS_LOW), 0.3, 1.0, 1.5]);      // 돌은 두지 않는다(출구의 큰 바위만 눈에 띄게)
+    scatter(40, () => [F, pick(GRASS_LOW), 0.25, 0.9, 1.5], { soft: true });
+  },
+  // 나무 길: 길 양옆에 큰 나무가 줄지어 선 가로수 길. 바깥도 나무만
+  treeLane({ along, scatter, pick }) {
+    along(['west', 'east', 'north'], 2.0, [0.5, 0.9], () => [F, pick(TREES.slice(0, 8)), 0.9, 1.15, 1.35]);
+    along(ALL, 2.2, [-0.6, -1.8], () => [F, pick(TREES), 1.0, 1.1, 1.5], { ext: 3, outD: 4 });
+    along(ALL, 2.6, [-3, -6], () => [F, pick(TREES), 1.2, 1.2, 1.6], { ext: 8, overlap: true, outD: 6 });
+    scatter(25, () => [F, pick(GRASS_LOW), 0.25, 0.9, 1.4], { soft: true });
+  },
+  // 덤불 길: 길 양옆이 덤불 벽. 나무는 하나도 두지 않는다
+  bushLane({ along, scatter, pick }) {
+    along(['west', 'east', 'north'], 0.9, [0.3, 1.3], () => [F, pick(BUSH_BIG), 0.6, 1.6, 2.3]);
+    along(ALL, 1.4, [-0.4, -2.4], () => [F, pick(BUSH_BIG), 0.8, 2.2, 3.0], { ext: 3, outD: 4 });
+    along(ALL, 2.0, [-3, -7], () => [F, pick(BUSH_BIG), 1.0, 2.8, 3.8], { ext: 8, overlap: true, outD: 6 });
+    scatter(18, () => [F, pick(BUSH_SMALL), 0.35, 0.9, 1.3], { where: (x) => Math.abs(x) > 1.1 });
+  },
+  // 호박밭: 울타리 안쪽 밭에 호박이 가득. 바깥은 키 큰 풀(나무·덤불 없이 탁 트인 밭)
+  pumpkinLane({ along, scatter, pick }) {
+    const PUMPKIN = ['pumpkin_orange', 'pumpkin_orange', 'pumpkin_yellow', 'pumpkin_orange_small', 'pumpkin_yellow_small'];
+    scatter(34, () => [H, pick(PUMPKIN), 0.35, 0.8, 1.25], { where: (x) => Math.abs(x) > 1.1, margin: 0.4 });
+    along(ALL, 1.0, [-0.5, -2.5], () => [F, pick(GRASS.slice(4)), 0.4, 1.4, 2.0], { ext: 3, outD: 4, overlap: true });
+    along(ALL, 1.6, [-3, -8], () => [F, pick(GRASS.slice(4)), 0.5, 1.8, 2.6], { ext: 8, overlap: true, outD: 6 });
+    scatter(20, () => [F, pick(GRASS_LOW), 0.25, 0.9, 1.3], { soft: true });
   },
   // 바위 골짜기: 절벽 위에 나무, 길 가장자리(어깨)에 풀·덤불·돌. 길 한가운데(바위가 굴러오는 길)는 거의 비운다
   valley(c) { valleyCommon(c, TREES, GRASS); },

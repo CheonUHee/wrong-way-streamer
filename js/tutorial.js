@@ -8,6 +8,7 @@
 import { $, esc } from './ui.js';
 import { setPaused, isTest } from './pause.js';
 import { all } from './core.js';
+import { STAGES } from './stages/index.js';
 
 /* ── 도식(SVG, 320×180) ── */
 const C = { bg: '#1e2129', panel: '#16181f', line: '#3a3f4d', text: '#e8eaf0', dim: '#8b90a0', acc: '#ffe14a', me: '#6fd3ff', troll: '#ff7ab8', ok: '#7be08a', bad: '#ff6a6a' };
@@ -47,20 +48,20 @@ export const ART = {
   // 채팅은 묻히고, 후원은 반드시 읽힌다
   dona: svg(defs + `<rect x="10" y="14" width="300" height="152" rx="8" fill="${C.panel}" stroke="${C.line}"/>`
     + chatLine(22, 28, '눈팅러', '#9bd0ff', 'ㅋㅋㅋㅋ', 130) + chatLine(22, 52, '나', C.me, '왼쪽 문 💨놓침', 130) + chatLine(22, 76, '감자튀김', '#ff9e6b', '귀엽다', 130)
-    + `<text x="90" y="118" font-size="10" fill="${C.dim}" text-anchor="middle">채팅이 붐비면 묻힘</text>`
-    + dona(170, 40, '나', C.me, '왼쪽 문으로 가!') + `<text x="235" y="96" font-size="10" fill="${C.ok}" text-anchor="middle" font-weight="700">✔ 반드시 읽음</text><text x="235" y="112" font-size="9" fill="${C.dim}" text-anchor="middle">대신 ⚡를 쓴다</text>`),
+    + `<text x="90" y="118" font-size="10" fill="${C.dim}" text-anchor="middle">채팅이 붐비면 묻힐 수 있다</text>`
+    + dona(170, 40, '나', C.me, '왼쪽 문으로 가!') + `<text x="235" y="96" font-size="10" fill="${C.ok}" text-anchor="middle" font-weight="700">✔ 반드시 읽는다</text><text x="235" y="112" font-size="9" fill="${C.dim}" text-anchor="middle">대신 ⚡를 쓴다</text>`),
   // 후원끼리는 가장 나중 것을 따른다
   troll: svg(defs + dona(20, 30, '훈수빌런', C.troll, '오른쪽 문 ㄱㄱ ㅋㅋ', 150) + dona(60, 78, '나', C.me, '아니야! 왼쪽 문!', 150)
-    + `<text x="248" y="98" font-size="11" fill="${C.ok}" font-weight="800">← 이걸 따름</text><text x="160" y="140" font-size="11" fill="${C.text}" text-anchor="middle">후원이 부딪치면 가장 나중 후원을 따른다</text>`),
+    + `<text x="218" y="98" font-size="11" fill="${C.ok}" font-weight="800">← 마지막 후원</text><text x="160" y="140" font-size="11" fill="${C.text}" text-anchor="middle">가장 나중에 보내진 후원을 따른다</text>`),
   // 돌 굴러오는 골짜기: 숨었다가 지나가면 출발
   boulder: svg(defs + `<path d="M10,160 L310,60 L310,170 L10,170Z" fill="#5a6b40"/><circle cx="250" cy="66" r="18" fill="#8d8478" stroke="#5e574d" stroke-width="3"/>`
     + arrow(225, 82, 170, 102, C.bad) + `<rect x="120" y="96" width="26" height="30" rx="4" fill="#2a2a24"/>` + face(133, 112, 9)
     + `<text x="133" y="148" font-size="10" fill="${C.ok}" text-anchor="middle" font-weight="700">틈새 = 안전</text>`
     + bubble(18, 22, '"숨어!"', 70) + bubble(98, 22, '지나가면 "지금 가!"', 130)),
   // 순서 퍼즐: 단서의 순서대로 누르기
-  order: svg(defs + `<rect x="100" y="16" width="120" height="44" rx="6" fill="#d9b98a"/><text x="160" y="45" font-size="16" text-anchor="middle">🌳 ➜ 🌿 ➜ 🪨</text>`
-    + [['🪨', 60], ['🌳', 160], ['🌿', 260]].map(([ic, x]) => `<text x="${x}" y="110" font-size="22" text-anchor="middle">${ic}</text><rect x="${x - 16}" y="122" width="32" height="18" rx="4" fill="#9a9a9a"/><ellipse cx="${x}" cy="122" rx="12" ry="5" fill="#c9c9c9"/>`).join('')
-    + `<text x="160" y="168" font-size="11" fill="${C.text}" text-anchor="middle">단서는 너만 볼 수 있다 — 순서를 말로 알려 주기</text>`),
+  order: svg(defs + `<rect x="100" y="16" width="120" height="44" rx="6" fill="#d9b98a"/><text x="160" y="45" font-size="16" text-anchor="middle">🌳 ➜ 🌿 ➜ 🎃</text>`
+    + [['🎃', 60], ['🌳', 160], ['🌿', 260]].map(([ic, x]) => `<text x="${x}" y="110" font-size="22" text-anchor="middle">${ic}</text><rect x="${x - 16}" y="122" width="32" height="18" rx="4" fill="#9a9a9a"/><ellipse cx="${x}" cy="122" rx="12" ry="5" fill="#c9c9c9"/>`).join('')
+    + `<text x="160" y="168" font-size="11" fill="${C.text}" text-anchor="middle">단서를 바탕으로 상호작용 순서를 알려 주기</text>`),
 };
 // 지금까지 배운 것 전부(작은 도식 다섯 개)
 const inner = k => ART[k].replace(/^<svg[^>]*>|<\/svg>$/g, '');
@@ -68,14 +69,39 @@ ART.finale = svg(defs + ['role', 'bag', 'clue', 'dona', 'boulder', 'order'].map(
 
 /* ── 창 ── */
 let queue = [], open = false;
+// 본문 글: 문장마다 줄을 바꾸고, "(예시: …)"는 흐린 색으로 한 줄에 붙여 둔다(중간에서 갈리지 않게)
+const fmt = text => esc(text)
+  .replace(/\s*\(예시:[^)]*\)/g, m => ` <span class="tut-ex">${m.trim()}</span>`)
+  .replace(/([.!?])\s+/g, '$1<br>')
+  .replace(/<\/span>\s+/g, '</span><br>');
+// 카드 크기 통일: 모든 스테이지의 가이드 중 제목+본문이 가장 긴 것에 맞춰 본문 칸 높이를 고정한다
+const ALL_CARDS = STAGES.flatMap(s => (s.tutorial || []).flatMap(t => t.cards));
+function fitBody() {
+  const body = $('tutBody'), w = body.clientWidth;
+  if (!w) return;
+  const m = body.cloneNode(true);
+  m.removeAttribute('id'); m.querySelectorAll('[id]').forEach(e => e.removeAttribute('id'));
+  Object.assign(m.style, { position: 'absolute', visibility: 'hidden', left: '0', top: '0', width: w + 'px', minHeight: '0' });
+  body.parentNode.appendChild(m);
+  const h = m.querySelector('h3'), p = m.querySelector('p');
+  let max = 0;
+  for (const c of ALL_CARDS) { h.textContent = c.title || ''; p.innerHTML = fmt(c.text); max = Math.max(max, m.offsetHeight); }
+  m.remove();
+  body.style.minHeight = max + 'px';
+}
+addEventListener('resize', () => { if (open) fitBody(); });
 function render(cards, i) {
   const c = cards[i];
   $('tutArt').innerHTML = ART[c.art] || '';
   $('tutTitle').textContent = c.title || '';
-  $('tutText').textContent = c.text;
+  $('tutText').innerHTML = fmt(c.text);
   $('tutPage').textContent = cards.length > 1 ? `${i + 1} / ${cards.length}` : '';
-  $('tutNext').textContent = i < cards.length - 1 ? '다음 ▶' : '알겠어!';
+  $('tutNext').textContent = i < cards.length - 1 ? '다음 ▶' : '확인';
   $('tutNext').onclick = () => i < cards.length - 1 ? render(cards, i + 1) : close();
+  // 이전: 두 장 이상일 때만. 첫 장에서는 자리만 차지하고 보이지 않는다
+  $('tutPrev').hidden = cards.length < 2;
+  $('tutPrev').classList.toggle('off', i === 0);
+  $('tutPrev').onclick = () => i > 0 && render(cards, i - 1);
 }
 function close() {
   $('tut').classList.remove('show');
@@ -87,6 +113,7 @@ function close() {
 function showNext() {
   open = true; setPaused(true);
   $('tut').classList.add('show');
+  fitBody();
   render(queue.shift(), 0);
   setTimeout(() => $('tutNext').focus(), 50);
 }

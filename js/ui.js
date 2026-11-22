@@ -12,31 +12,41 @@ const FACES = {
   think:  '<circle cx="80" cy="112" r="7" fill="#3a2a4a"/><circle cx="124" cy="112" r="7" fill="#3a2a4a"/><path d="M92 146 H110" stroke="#b2455e" stroke-width="4" stroke-linecap="round"/>',
 };
 /* ── 스트리머 연속 이미지(감정별 프레임 애니메이션) ──
-   이미지 경로 규칙: assets/streamer/<감정>/1.png, 2.png, ...
-   frames 의 숫자를 장수로 바꾸면 해당 감정은 플레이스홀더 대신 이미지가 재생된다.
+   원본: assets/streamer/<감정>/<감정>N.png (1024×1536, 제작 지침 docs/streamer_sprites.md)
+   게임용: assets/sprites/<감정>N.webp (500×600). 원본을 바꾸면 tools/sprites.html 로 다시 만든다.
+   frames: 감정별 장 수(0이면 플레이스홀더 그림). seq: 재생 순서(없으면 1,2,…N 반복)
    think = API 응답을 기다리는 동안의 '채팅 읽는 중' 표정(말풍선 없음). */
+const run = (n, k) => Array(k).fill(n);
 const SPRITES = {
-  dir: 'assets/streamer', ext: 'png', fps: 8,
-  frames: { normal: 0, happy: 0, shout: 0, angry: 0, sad: 0, think: 0 },
-  once: [],                         // 반복하지 않고 마지막 장에서 멈출 감정 (예: ['shout'])
+  dir: 'assets/sprites', ext: 'webp', fps: 8,
+  frames: { normal: 4, happy: 6, shout: 4, angry: 4, sad: 6, think: 3 },
+  seq: {
+    // 평소: 가만히 있다가 가끔 숨 쉬고(2) 가끔 눈 깜빡임(3→4→3)
+    normal: [...run(1, 10), ...run(2, 6), ...run(1, 12), 3, 4, 3, ...run(1, 8), ...run(2, 6), ...run(1, 6)],
+    // 채팅 읽는 중: 오른쪽을 보다가 가끔 깜빡임
+    think: [...run(1, 14), 2, 3, 2, ...run(1, 10)],
+  },
+  once: ['shout'],                  // 반복하지 않고 마지막 장에서 멈출 감정
 };
-const MOUTH = { x: 0.2, y: 0.6 };   // 말풍선 꼬리가 향할 지점(스트리머 이미지 내 비율)
+const MOUTH = { x: 0.38, y: 0.57 }; // 말풍선 꼬리가 향할 지점(스트리머 이미지 내 비율). 얼굴을 덮지 않게 입 왼쪽 볼 바깥
 const spriteImgs = {};
 for (const [emo, n] of Object.entries(SPRITES.frames)) {
-  spriteImgs[emo] = Array.from({ length: n }, (_, i) => { const im = new Image(); im.src = `${SPRITES.dir}/${emo}/${i + 1}.${SPRITES.ext}`; return im; });
+  spriteImgs[emo] = Array.from({ length: n }, (_, i) => { const im = new Image(); im.src = `${SPRITES.dir}/${emo}${i + 1}.${SPRITES.ext}`; return im; });
 }
 let spriteTimer;
 export function setFace(emo) {
   clearInterval(spriteTimer);
-  const frames = spriteImgs[emo]?.length ? spriteImgs[emo] : spriteImgs.normal;
+  if (!spriteImgs[emo]?.length) emo = 'normal';
+  const frames = spriteImgs[emo];
   streamer.classList.toggle('has-sprite', frames.length > 0);
   $('sprite').hidden = !frames.length;
   if (!frames.length) { $('face').innerHTML = FACES[emo] || FACES.normal; return; }
+  const seq = SPRITES.seq[emo] || frames.map((_, i) => i + 1);
   let i = 0; const once = SPRITES.once.includes(emo);
-  $('sprite').src = frames[0].src;
-  if (frames.length > 1) spriteTimer = setInterval(() => {
-    i++; if (once && i >= frames.length) return clearInterval(spriteTimer);
-    $('sprite').src = frames[i % frames.length].src;
+  $('sprite').src = frames[seq[0] - 1].src;
+  if (seq.length > 1) spriteTimer = setInterval(() => {
+    i++; if (once && i >= seq.length) return clearInterval(spriteTimer);
+    $('sprite').src = frames[seq[i % seq.length] - 1].src;
   }, 1000 / SPRITES.fps);
 }
 setFace('normal');

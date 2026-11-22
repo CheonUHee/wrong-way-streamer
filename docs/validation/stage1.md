@@ -1,6 +1,6 @@
 # 검증 결과: 튜토리얼 연습장
 
-2026-11-19 · node tools/validate.mjs stage1
+2026-11-22 · node tools/validate.mjs stage1
 
 - 정답 경로 6수로 클리어 ✔
 - 테스트 통과 ✔ 버튼 없이는 문이 안 열린다

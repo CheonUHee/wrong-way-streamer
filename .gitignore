@@ -11,3 +11,6 @@ assets/models/**/obj/
 assets/models/**/Samples/
 assets/models/**/samples/
 assets/models/**/*.blend
+
+# 스트리머 표정 원본(1024×1536 PNG, 42MB). 게임은 tools/sprites.html 로 만든 assets/sprites/*.webp 를 쓴다
+assets/streamer/

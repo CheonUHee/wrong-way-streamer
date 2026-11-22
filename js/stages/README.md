@@ -57,10 +57,10 @@ room: {
 
 환경 옵션
 - 방(room): `grid: true`(프로토타입 격자 벽·바닥) · `colors: { wall, wainscot, trim, ceil }` · `glowColor`(개구부 뒤 빛 색) · 개구부마다 `glow` 색
-- 야외(outdoor): `border: 'fence' | 'bush' | 'cliff'` · `day: true`(낮 조명) · `path: 폭`(가운데 흙길) · `slope: 기울기`(북쪽으로 1m 갈 때 올라가는 높이. 땅·소품·오브젝트·눈높이에 모두 적용)
+- 야외(outdoor): `border: 'fence' | 'bush' | 'cliff' | 'none'` · `backdrop: false`(경계 밖 기본 나무 끄기) · `day: true`(낮 조명) · `path: 폭`(가운데 흙길) · `trails: [[x1, z1, x2, z2, 폭], …]`(흙길 여러 갈래, 평지 전용) · `slope: 기울기`(북쪽으로 1m 갈 때 올라가는 높이. 땅·소품·오브젝트·눈높이에 모두 적용)
 - `cliff`: 동·서 변에 큰 바위 절벽을 세우고, `openings` 자리는 틈새(숨을 곳)로 비운다
 - 자동 꾸미기(`js/dress.js`): 가장자리·경계 밖·절벽 위를 테마 소품으로 빽빽하게 채운다. 오브젝트·서는 자리·입구·개구부 앞은 비워 둔다. 규칙·AI에는 영향이 없다.
-  `dress: 'proto' | 'forest' | 'valley' | 'ruins' | 'crypt' | 'graveyard' | false`(생략하면 env로 짐작) · `dressDensity: 1`(밀도 배율). 같은 구역은 언제나 같은 배치(구역 id로 정한 난수)
+  `dress: 'proto' | 'forest' | 'crossroad' | 'treeLane' | 'bushLane' | 'pumpkinLane' | 'valley' | 'ruins' | 'crypt' | 'graveyard' | false`(생략하면 env로 짐작) · `dressDensity: 1`(밀도 배율). 같은 구역은 언제나 같은 배치(구역 id로 정한 난수)
 
 ### 주기 위험(hazard): 굴러오는 바위·통
 
