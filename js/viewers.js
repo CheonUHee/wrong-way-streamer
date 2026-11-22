@@ -63,7 +63,8 @@ function lure() {
     || (o.exit && stage.areas[o.exit.split('@')[0]]?.checkpoint === false));
   const shiny = objs.filter(o => o.fx && (o.fx.glow || o.fx.sparkle || o.fx.anim));
   // 단서(석판·명판)를 "개꿀템"이라고 꾀는 건 어색하다(Gemini 플레이테스트). 단서와 안내판은 뺀다
-  const plain = objs.filter(o => o.kind !== 'sign' && !o.clue);
+  // lure: false 인 것(오솔길 사이 지름길·돌아가는 길 같은 길 안내용 오브젝트)도 뺀다. "~(공터를 지나서) 개꿀템"은 어색하다
+  const plain = objs.filter(o => o.kind !== 'sign' && !o.clue && o.lure !== false);
   return pick(trap.length && Math.random() < 0.6 ? trap : shiny.length ? shiny : plain.length ? plain : objs);
 }
 const TROLL_LINES = [n => `${n} 개꿀템 같은데 ㅋㅋ 먼저 ㄱㄱ`, n => `${n} 한 번만 만져봐 제발 ㅋㅋㅋ`, n => `야 ${n} 안 보고 가면 후회함`, n => `정답 ${n}임 ㄹㅇ 믿어봐`];

@@ -188,6 +188,8 @@ export function promptContext(stage, s) {
     last: s.last,
     noticed: n ? `${n.id}: ${describe(s, n)}` : '',
     history: s.history.join('\n') || '없음',
+    done: (s.done || []).map(d => `- ${d}`).join('\n'),
+    heard: (s.heard || []).map((h, i, a) => i === a.length - 1 && a.length > 1 ? `${h}  ← 가장 최근` : h).join('\n'),
     deaths: s.deaths.length
       ? s.deaths.map((d, i) => `- ${i + 1}번째: ${areaName(stage, d.area)}의 ${d.obj} 쪽에서 ${d.reason} → 배운 것: ${lessonOf(stage, d)}`).join('\n')
       : '없음',

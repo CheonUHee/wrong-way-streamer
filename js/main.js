@@ -12,13 +12,19 @@ function applyTurn(out, msgs) {
   const line = String(out.line || '...').slice(0, 80);
   say(line, emo);
   const st0 = state(), wasAsking = st0.asking && (msgs.length || Date.now() - (st0.askedAt || 0) >= 30000);
+  const flags0 = JSON.stringify(st0.flags);
   const result = perform({ type: String(a.type || 'idle'), target: a.target, item: a.item });
   const S = state();
+  // 상태를 바꾼 결과(버튼 눌림·풀림, 문 열림 등)는 따로 기억한다. 이미 한 일을 또 하러 가지 않게(Gemini 플레이테스트)
+  if (S === st0 && JSON.stringify(S.flags) !== flags0) S.done = [...(S.done || []), result].slice(-6);
   S.last = result; S.noticed = null;                          // 눈에 띈 것은 한 번 전달하면 잊는다
   if (wasAsking && S.asking === st0.asking) S.asking = null;   // 대답을 들었거나 기다리다 지쳤다(이번 행동이 새로 물은 건 남긴다)
   msgs.forEach(m => S.history.push(`${m.nick}(${m.kind === 'dona' ? '후원' : '채팅'}): ${m.text}`));
   S.history.push(`한별(나): ${line}`, `결과: ${result}`);
   S.history = S.history.slice(-8);
+  // 플레이어의 채팅과 후원은 따로 더 오래 기억한다(다른 시청자 잡담에 밀려 "나무 길은 왼쪽" 같은 답을 잊지 않게)
+  const keep = msgs.filter(m => m.role === 'me' || m.kind === 'dona').map(m => `${m.nick}(${m.kind === 'dona' ? '후원' : '채팅'}): ${m.text}`);
+  S.heard = [...(S.heard || []), ...keep].slice(-4);
   (Array.isArray(out.viewers) ? out.viewers : []).slice(0, 2)
     .forEach((v, i) => setTimeout(() => viewerLine(String(v).slice(0, 40)), 700 + i * 900));
 }
@@ -46,7 +52,8 @@ async function turn() {
   if (inFlight) return;
   // 걷기·사망·스테이지 전환 연출 중이거나 클리어 직후면 끝날 때까지 기다린다
   // 걷는 중이면 시청자 메시지가 왔을 때만 멈춰 세우고 새로 정한다(혼자서는 끊지 않는다)
-  const walkStop = pending.length && canInterrupt();
+  // 다른 시청자 잡담으로는 멈추지 않는다(Gemini 플레이테스트: 버튼 누르러 가다 잡담에 끊겨 못 누르고는 눌렀다고 착각했다)
+  const walkStop = pending.some(m => m.role === 'me' || m.kind === 'dona') && canInterrupt();
   if (isTest()) { pending = []; return; }                       // 테스트 모드: AI를 부르지 않는다(꺼질 때 다시 잡는다)
   if (document.hidden || isPaused() || (isBusy() && !walkStop) || state().cleared) return schedule(pending.length ? 500 : 1500);
   // 한별이 시청자에게 물어본 뒤에는 대답(채팅·후원)이 올 때까지 스스로 움직이지 않는다(최대 30초)

@@ -20,6 +20,8 @@
 <h1>스트리머 이미지 변환기</h1>
 <p>assets/streamer/&lt;감정&gt;/&lt;감정&gt;N.png 원본을 잘라 줄이고 WebP로 바꿔 assets/sprites/ 에 저장합니다. 개발 서버(python tools/serve.py 8080)에서 열어야 저장됩니다.</p>
 <button id="go">변환해서 저장</button>
+<label style="margin-left:12px"><input type="checkbox" id="match" checked> 색을 normal1에 맞추기</label>
+<label style="margin-left:12px"><input type="checkbox" id="before"> 보정 전 그림도 같이 보기</label>
 <div id="log"></div>
 <div id="out"></div>
 <script>
@@ -35,19 +37,100 @@ const SHIFT = { angry2: 24, angry3: -10 };
 // 방송 정보의 프로필 사진: normal1에서 눈과 머리카락만(원본 px 기준 정사각형)
 const AVATAR = { from: 'normal1', x: 285, y: 430, s: 520, out: 128 };
 
+/* ── 색 맞춤: 장마다 그림 전체에 낀 색 필터(누런 기운 등)를 걷어 normal1의 색에 맞춘다 ──
+   1) 4분의 1 크기로 줄여 normal1과 위치가 가장 잘 겹치는 어긋남(dx, dy)을 찾는다(통통 튀기·흔들림 보정)
+   2) 겹친 픽셀 중 표정이 바뀌는 얼굴, 외곽선(어두운 곳), 경계(색이 급히 바뀌는 곳)를 빼고
+      "이 장의 색 → normal1의 색" 변환(RGB 3×3 + 더하기)을 최소제곱으로 구한다. 크게 어긋나는 픽셀(볼터치·눈물·효과)은 두 번 걸러 낸다
+   3) 그 변환을 그림 전체에 적용한다. 명암·선은 그대로이고 색 기운만 바뀐다 */
+const MATCH = { ref: 'normal1', scale: 0.25, face: [370, 700, 690, 1010], search: [12, 8] };   // face: 원본 px [x0, x1, y0, y1], search: 줄인 그림 px
+const lum = (d, i) => (d[i] + d[i + 1] + d[i + 2]) / 3;
+function small(im) {
+  const w = Math.round(im.width * MATCH.scale), h = Math.round(im.height * MATCH.scale);
+  const cv = Object.assign(document.createElement('canvas'), { width: w, height: h }), g = cv.getContext('2d');
+  g.imageSmoothingQuality = 'high'; g.drawImage(im, 0, 0, w, h);
+  return { w, h, d: g.getImageData(0, 0, w, h).data };
+}
+function bestShift(s, r) {
+  const [sx, sy] = MATCH.search; let best = [0, 0, Infinity];
+  for (let dy = -sy; dy <= sy; dy++) for (let dx = -sx; dx <= sx; dx++) {
+    let sum = 0, n = 0;
+    for (let y = sy; y < r.h - sy; y += 3) for (let x = sx; x < r.w - sx; x += 3) {
+      const i = (y * r.w + x) * 4, j = ((y + dy) * s.w + x + dx) * 4;
+      if (r.d[i + 3] < 250 || s.d[j + 3] < 250) continue;
+      sum += Math.abs(lum(r.d, i) - lum(s.d, j)); n++;
+    }
+    if (n > 500 && sum / n < best[2]) best = [dx, dy, sum / n];
+  }
+  return best;
+}
+function solve4(A, b) {   // 4×4 연립방정식(가우스 소거)
+  const m = A.map((row, i) => [...row, b[i]]);
+  for (let c = 0; c < 4; c++) {
+    let p = c; for (let r = c + 1; r < 4; r++) if (Math.abs(m[r][c]) > Math.abs(m[p][c])) p = r;
+    [m[c], m[p]] = [m[p], m[c]];
+    for (let r = 0; r < 4; r++) if (r !== c) { const f = m[r][c] / m[c][c]; for (let k = c; k < 5; k++) m[r][k] -= f * m[c][k]; }
+  }
+  return m.map((row, i) => row[4] / row[i]);
+}
+const applyM = (M, R, G, B) => [0, 1, 2].map(c => M[c][0] * R + M[c][1] * G + M[c][2] * B + M[c][3]);
+function fitColor(s, r) {
+  const [dx, dy] = bestShift(s, r), k = MATCH.scale, [fx0, fx1, fy0, fy1] = MATCH.face.map(v => v * k);
+  let pairs = [];
+  for (let y = 2; y < r.h - 2; y += 2) for (let x = 2; x < r.w - 2; x += 2) {
+    if (x > fx0 && x < fx1 && y > fy0 && y < fy1) continue;
+    const xs = x + dx, ys = y + dy; if (xs < 1 || ys < 1 || xs >= s.w - 1 || ys >= s.h - 1) continue;
+    const i = (y * r.w + x) * 4, j = (ys * s.w + xs) * 4;
+    if (r.d[i + 3] < 250 || s.d[j + 3] < 250 || lum(r.d, i) < 70) continue;
+    const gx = Math.abs(lum(r.d, i + 4) - lum(r.d, i - 4)), gy = Math.abs(lum(r.d, i + r.w * 4) - lum(r.d, i - r.w * 4));
+    if (gx + gy > 24) continue;
+    pairs.push([s.d[j], s.d[j + 1], s.d[j + 2], r.d[i], r.d[i + 1], r.d[i + 2]]);
+  }
+  const diff = (M, p) => { const o = applyM(M, p[0], p[1], p[2]); return Math.abs(o[0] - p[3]) + Math.abs(o[1] - p[4]) + Math.abs(o[2] - p[5]); };
+  const I = [[1, 0, 0, 0], [0, 1, 0, 0], [0, 0, 1, 0]];
+  const before = pairs.reduce((t, p) => t + diff(I, p), 0) / pairs.length / 3;
+  let M = I;
+  for (let pass = 0; pass < 3; pass++) {
+    // 정규방정식 + 단위 변환 쪽으로 살짝 당기는 항(쏠린 데이터로 엉뚱한 변환이 나오지 않게)
+    const lam = pairs.length * 50, XtX = [[0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0], [0, 0, 0, 0]], XtY = [[0, 0, 0], [0, 0, 0], [0, 0, 0], [0, 0, 0]];
+    for (const p of pairs) { const x = [p[0], p[1], p[2], 1]; for (let a = 0; a < 4; a++) { for (let b = 0; b < 4; b++) XtX[a][b] += x[a] * x[b]; for (let c = 0; c < 3; c++) XtY[a][c] += x[a] * p[3 + c]; } }
+    for (let a = 0; a < 3; a++) { XtX[a][a] += lam; XtY[a][a] += lam; }
+    M = [0, 1, 2].map(c => { const v = solve4(XtX, XtY.map(row => row[c])); return [v[0], v[1], v[2], v[3]]; });
+    const res = pairs.map(p => diff(M, p)), med = [...res].sort((a, b) => a - b)[res.length >> 1];
+    pairs = pairs.filter((p, i) => res[i] <= Math.max(9, med * 2.5));
+  }
+  const after = pairs.reduce((t, p) => t + diff(M, p), 0) / pairs.length / 3;
+  return { M, dx, dy, before, after, n: pairs.length };
+}
+// 영역 평균색(원본 px 사각형, 밝기 범위) — 보정 전·후 비교용
+function regionHex(sm, M, [x0, y0, x1, y1], lmin, lmax) {
+  const k = MATCH.scale; let r = 0, g = 0, b = 0, n = 0;
+  for (let y = Math.round(y0 * k); y < y1 * k; y++) for (let x = Math.round(x0 * k); x < x1 * k; x++) {
+    const i = (y * sm.w + x) * 4; if (sm.d[i + 3] < 250) continue;
+    const L = lum(sm.d, i); if (L < lmin || L > lmax) continue;
+    const o = M ? applyM(M, sm.d[i], sm.d[i + 1], sm.d[i + 2]) : [sm.d[i], sm.d[i + 1], sm.d[i + 2]];
+    r += o[0]; g += o[1]; b += o[2]; n++;
+  }
+  const h = v => Math.max(0, Math.min(255, Math.round(v / n))).toString(16).padStart(2, '0').toUpperCase();
+  return n ? `#${h(r)}${h(g)}${h(b)}` : '-';
+}
+const REGIONS = { 스웨터: [[120, 1250, 330, 1500], 150, 255], 머리: [[300, 480, 720, 640], 120, 240] };
+
 const log = t => (document.getElementById('log').textContent += t + '\n');
 const load = src => new Promise((ok, no) => { const im = new Image(); im.onload = () => ok(im); im.onerror = no; im.src = src; });
 const toWebp = cv => new Promise(ok => cv.toBlob(ok, 'image/webp', OUT.quality));
 
-function draw(im, name) {
+function draw(im, name, M) {
   const cv = Object.assign(document.createElement('canvas'), { width: OUT.w, height: OUT.h });
   const g = cv.getContext('2d');
   g.imageSmoothingQuality = 'high';
   const k = OUT.w / CROP.w, dx = (SHIFT[name] || 0) * k;
   g.drawImage(im, CROP.x, CROP.y, CROP.w, CROP.h, dx, 0, OUT.w, OUT.h);
-  // 원본의 몸이 살짝 비쳐 보이는(알파 250 안팎) 부분을 완전히 불투명하게
+  // 원본의 몸이 살짝 비쳐 보이는(알파 250 안팎) 부분을 완전히 불투명하게 + 색 맞춤
   const d = g.getImageData(0, 0, OUT.w, OUT.h), a = d.data;
-  for (let i = 3; i < a.length; i += 4) if (a[i] >= 236) a[i] = 255;
+  for (let i = 0; i < a.length; i += 4) {
+    if (a[i + 3] >= 236) a[i + 3] = 255;
+    if (M && a[i + 3]) { const o = applyM(M, a[i], a[i + 1], a[i + 2]); a[i] = o[0]; a[i + 1] = o[1]; a[i + 2] = o[2]; }   // ImageData가 0~255로 자른다
+  }
   g.putImageData(d, 0, 0);
   return cv;
 }
@@ -70,6 +153,9 @@ function show(row, name, blob, cls = '') {
 document.getElementById('go').onclick = async () => {
   document.getElementById('out').innerHTML = ''; document.getElementById('log').textContent = '';
   const counts = {}; let total = 0;
+  const matchOn = document.getElementById('match').checked, showBefore = document.getElementById('before').checked;
+  const ref = small(await load(`${SRC}/${MATCH.ref.replace(/\d+$/, '')}/${MATCH.ref}.png`));
+  if (matchOn) log(`색 맞춤 기준 ${MATCH.ref}: 스웨터 ${regionHex(ref, null, ...REGIONS.스웨터)} · 머리 ${regionHex(ref, null, ...REGIONS.머리)}\n장   어긋남(dx,dy)  평균 색차 전→후   스웨터 전→후        머리 전→후`);
   for (const emo of EMOS) {
     const row = document.createElement('div'); row.className = 'row'; row.innerHTML = `<b>${emo}</b>`;
     document.getElementById('out').appendChild(row);
@@ -77,7 +163,13 @@ document.getElementById('go').onclick = async () => {
     for (;;) {
       const name = emo + (n + 1);
       let im; try { im = await load(`${SRC}/${emo}/${name}.png`); } catch { break; }
-      const blob = await toWebp(draw(im, name));
+      let M = null;
+      if (matchOn && name !== MATCH.ref) {
+        const sm = small(im), f = fitColor(sm, ref); M = f.M;
+        log(`${name.padEnd(8)} ${String([f.dx * 4, f.dy * 4]).padEnd(10)} ${f.before.toFixed(1).padStart(5)} → ${f.after.toFixed(1).padEnd(6)} ${Object.values(REGIONS).map(rg => `${regionHex(sm, null, ...rg)}→${regionHex(sm, M, ...rg)}`).join('  ')}`);
+      }
+      if (showBefore && M) show(row, name + ' 전', await toWebp(draw(im, name)));
+      const blob = await toWebp(draw(im, name, M));
       await save(name, blob); show(row, name, blob); total += blob.size; n++;
       if (name === AVATAR.from) { const b = await toWebp(avatar(im)); await save('avatar', b); show(row, 'avatar', b, 'avatar'); }
     }

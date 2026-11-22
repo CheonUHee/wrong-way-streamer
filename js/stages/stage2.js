@@ -153,9 +153,18 @@ export default {
       desc: '남쪽 오솔길 끝에 있는 둥근 돌 버튼',              // 호박밭
     },
     // 공터로 돌아가는 길
-    { id: 'backFromWest', area: 'west', name: '공터로 돌아가는 길', kind: 'spot', solid: false, exit: 'glade@fromWest', pos: [0, 0, 6.6], stand: [0, 5.8], look: [0, 1.3, 8], desc: '뒤쪽, 갈림길 공터로 돌아가는 길' },
-    { id: 'backFromEast', area: 'east', name: '공터로 돌아가는 길', kind: 'spot', solid: false, exit: 'glade@fromEast', pos: [0, 0, 6.6], stand: [0, 5.8], look: [0, 1.3, 8], desc: '뒤쪽, 갈림길 공터로 돌아가는 길' },
-    { id: 'backFromSouth', area: 'south', name: '공터로 돌아가는 길', kind: 'spot', solid: false, exit: 'glade@fromSouth', pos: [0, 0, 6.6], stand: [0, 5.8], look: [0, 1.3, 8], desc: '뒤쪽, 갈림길 공터로 돌아가는 길' },
+    { id: 'backFromWest', area: 'west', name: '공터로 돌아가는 길', kind: 'spot', solid: false, lure: false, exit: 'glade@fromWest', pos: [0, 0, 6.6], stand: [0, 5.8], look: [0, 1.3, 8], desc: '뒤쪽, 갈림길 공터로 돌아가는 길' },
+    { id: 'backFromEast', area: 'east', name: '공터로 돌아가는 길', kind: 'spot', solid: false, lure: false, exit: 'glade@fromEast', pos: [0, 0, 6.6], stand: [0, 5.8], look: [0, 1.3, 8], desc: '뒤쪽, 갈림길 공터로 돌아가는 길' },
+    { id: 'backFromSouth', area: 'south', name: '공터로 돌아가는 길', kind: 'spot', solid: false, lure: false, exit: 'glade@fromSouth', pos: [0, 0, 6.6], stand: [0, 5.8], look: [0, 1.3, 8], desc: '뒤쪽, 갈림길 공터로 돌아가는 길' },
+    // 오솔길에서 다른 오솔길로 바로 가기(공터를 지나간다). 오솔길 안에서 "서쪽 길로 가"라는 말을 들었을 때 고를 수 있게
+    ...[['west', '서쪽'], ['east', '동쪽'], ['south', '남쪽']].flatMap(([from]) => [['west', '서쪽'], ['east', '동쪽'], ['south', '남쪽']]
+      .filter(([to]) => to !== from)
+      .map(([to, dir], i) => ({
+        id: `${from}To${to[0].toUpperCase()}${to.slice(1)}`, area: from, name: `${dir} 오솔길(공터를 지나서)`, kind: 'spot', solid: false, lure: false,
+        exit: `${to}@fromHub`, exitSay: `공터를 지나 ${dir} 오솔길로 들어갔다`,
+        pos: [i ? 1.2 : -1.2, 0, 6.6], stand: [i ? 0.9 : -0.9, 5.8], look: [0, 1.3, 8],
+        desc: `뒤쪽 길로 나가 갈림길 공터를 지나 ${dir} 오솔길로 가는 길`,
+      }))),
   ],
 
   rules: [
@@ -165,6 +174,9 @@ export default {
     { target: 'btnEast', if: ['p1', '!p2'], do: ['set:p2'], say: '동쪽 길 끝 버튼이 딸깍 눌려 들어갔다' },
     { target: 'btnSouth', if: ['p2', '!gateOpen'], do: ['set:gateOpen'], say: '남쪽 길 끝 버튼을 누르자 멀리 공터 쪽에서 쿠웅…! 북쪽 길을 막던 큰 바위가 가라앉는 소리가 났다!' },
     { target: ['btnWest', 'btnEast', 'btnSouth'], if: 'gateOpen', say: '버튼은 이미 눌려 있다. 공터 북쪽 길은 열렸다' },
+    // 이미 눌린 버튼을 또 누르면 아무 일도 없다(전부 풀리게 하면 Gemini 플레이테스트에서 너무 가혹했다: 확인하러 다시 누르다 처음부터)
+    { target: 'btnWest', if: 'p1', say: '서쪽 길 끝 버튼은 이미 눌려 들어가 있다' },
+    { target: 'btnEast', if: 'p2', say: '동쪽 길 끝 버튼은 이미 눌려 들어가 있다' },
     { target: ['btnWest', 'btnEast', 'btnSouth'], do: ['unset:p1', 'unset:p2'], say: '버튼을 눌렀더니 덜컥! 숲 여기저기서 눌려 있던 버튼들이 튀어 오르는 소리가 났다. 순서가 틀렸나 보다' },
     { target: 'stoneGate', if: 'gateOpen', do: ['clear'], say: '바위가 가라앉은 길을 지나 숲 밖으로 빠져나갔다. 저 앞에 바위 절벽 골짜기가 보인다. 스테이지 클리어!' },
     { target: 'stoneGate', say: '커다란 바위가 길을 꽉 막고 있다. 밀어도 꿈쩍하지 않는다' },
@@ -200,6 +212,7 @@ export default {
     { type: 'move', target: 'stoneGate' },
   ],
   tests: [
+    { name: '이미 눌린 버튼을 다시 눌러도 풀리지 않는다', actions: [{ type: 'move', target: 'pathWest' }, { type: 'interact', target: 'btnWest' }, { type: 'interact', target: 'btnWest' }], expect: { flag: ['p1'] } },
     { name: '순서가 틀리면 버튼이 모두 풀린다', actions: [{ type: 'move', target: 'pathWest' }, { type: 'interact', target: 'btnWest' }, { type: 'move', target: 'backFromWest' }, { type: 'move', target: 'pathSouth' }, { type: 'interact', target: 'btnSouth' }], expect: { flag: ['!p1', '!gateOpen'] } },
     { name: '호박(남쪽) 길 버튼부터 누르면 안 열린다', actions: [{ type: 'move', target: 'pathSouth' }, { type: 'interact', target: 'btnSouth' }, { type: 'move', target: 'backFromSouth' }, { type: 'move', target: 'pathWest' }, { type: 'interact', target: 'btnWest' }, { type: 'move', target: 'backFromWest' }, { type: 'move', target: 'pathEast' }, { type: 'interact', target: 'btnEast' }], expect: { flag: ['p2', '!gateOpen'] } },
     { name: '석판을 안 닦아도 순서만 맞으면 열린다(단서는 도움일 뿐)', actions: [{ type: 'move', target: 'pathWest' }, { type: 'interact', target: 'btnWest' }, { type: 'move', target: 'backFromWest' }, { type: 'move', target: 'pathEast' }, { type: 'interact', target: 'btnEast' }, { type: 'move', target: 'backFromEast' }, { type: 'move', target: 'pathSouth' }, { type: 'interact', target: 'btnSouth' }, { type: 'move', target: 'backFromSouth' }, { type: 'interact', target: 'stoneGate' }], expect: { cleared: true } },
