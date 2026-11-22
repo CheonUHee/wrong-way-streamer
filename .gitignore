@@ -14,3 +14,6 @@ assets/models/**/*.blend
 
 # 스트리머 표정 원본(1024×1536 PNG, 42MB). 게임은 tools/sprites.html 로 만든 assets/sprites/*.webp 를 쓴다
 assets/streamer/
+
+# 에셋 팩 원본 zip(합계 약 72MB). 게임은 풀어 둔 assets/models/ 만 쓴다
+assets/*.zip
