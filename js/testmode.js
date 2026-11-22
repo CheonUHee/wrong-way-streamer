@@ -5,6 +5,7 @@
    - 조준점이 가리키는 곳의 좌표·모델 이름이 보인다. P 키: 그 좌표를 decor 한 줄로 복사해 배치 메모에 쌓는다.
    - '보기'는 카메라만 그 앞으로 옮긴다. 나머지 버튼은 규칙을 직접 실행(다가가기·상호작용·줍기·아이템 쓰기)해 퍼즐을 확인한다. 결과는 채팅창에 나온다. */
 import { $, esc, addLine } from './ui.js';
+import { hasFlag } from './env.js';
 import { isTest, setTest } from './pause.js';
 import * as view from './view3d.js';
 import { state, current, perform, jumpArea, loadStage, stageIndex, visibleObjects, isBusy } from './stage.js';
@@ -117,4 +118,4 @@ function aimInteract() {
   setTimeout(() => refresh(true), 300);
 }
 
-if (new URLSearchParams(location.search).has('test')) setTimeout(() => toggle(true), 50);
+if (hasFlag('test')) setTimeout(() => toggle(true), 50);

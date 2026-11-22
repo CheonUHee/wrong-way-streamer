@@ -301,3 +301,7 @@ body.testing .streamer, body.testing .bubble { opacity: .25; }
 .testpanel .edbox button { background: var(--panel); border: 1px solid var(--line); border-radius: 5px; padding: 2px 8px; font-size: 12px; color: inherit; }
 .testpanel .edbox button:hover { border-color: #9fb2ff; }
 .testpanel .edbox select, .testpanel .edbox input:not([type]) { background: var(--panel); color: inherit; border: 1px solid var(--line); border-radius: 5px; padding: 2px 6px; font-size: 12px; max-width: 220px; }
+
+/* 배포 모드(js/env.js): 개발용 화면을 숨긴다. 내 컴퓨터에서 보거나 주소 뒤에 ?dev를 붙이면 다시 보인다 */
+.release #testBtn, .release #testPanel, .release #guideBtn, .release #aiChip, .release #settingsBtn,
+.release .proto, .release .streamer .tag { display: none !important; }

@@ -1,6 +1,7 @@
 /* AI 스트리머 두뇌: 설정(API 키 · 모델), 프롬프트, Gemini 호출, 키가 없을 때의 더미 응답 */
 import { $, addLine, pick } from './ui.js';
 import { context, visibleObjects, state } from './stage.js';
+import { flag, RELAY } from './env.js';
 
 let onConfigChange = () => {};
 export const setOnConfigChange = fn => { onConfigChange = fn; };
@@ -11,8 +12,10 @@ export const cfg = { key: '', model: DEFAULT_MODEL, proxy: '' };
 try { Object.assign(cfg, JSON.parse(localStorage.getItem('wws.cfg') || '{}')); } catch {}
 if (!cfg.model || cfg.model === 'gemini-3.5-flash-lite') cfg.model = DEFAULT_MODEL;   // 이전 기본값으로 저장된 설정을 새 기본값으로 교체
 // 주소 뒤에 ?ai=off 를 붙이면 키가 저장돼 있어도 더미 응답으로 동작한다(개발·테스트용, 비용 없음)
-const FORCE_OFF = new URLSearchParams(location.search).get('ai') === 'off';
-export const aiOn = () => !FORCE_OFF && !!(cfg.key || cfg.proxy);
+const FORCE_OFF = flag('ai') === 'off';
+// 중계 서버: 설정에 적은 프록시 > (키가 없을 때) 배포된 사이트의 /api/gemini. 내 컴퓨터에서는 RELAY가 비어 있어 키로 직접 부른다
+const relay = () => cfg.proxy || (cfg.key ? '' : RELAY);
+export const aiOn = () => !FORCE_OFF && !!(cfg.key || relay());
 function refreshChip() {
   $('aiChip').textContent = aiOn() ? `AI 켜짐 · ${cfg.model}` : 'AI 꺼짐 (더미 응답)';
   $('aiChip').classList.toggle('on', aiOn());
@@ -55,7 +58,7 @@ export const SYSTEM = `너는 인터넷 방송 플랫폼 '지지직(Zizizik)'에
 - use: 인벤토리의 item을 target에 사용한다
 - explore: 정한 대상 없이 주변을 돌아다니며 둘러본다(target은 null). "둘러봐", "다른 데도 봐" 같은 지시나, 딱히 끌리는 게 없을 때
 - idle: 제자리에서 말만 한다
-target은 '보이는 오브젝트'의 id 중 하나, item은 인벤토리에 있는 아이템 이름이어야 한다.
+target은 '보이는 오브젝트'의 id 중 하나, item은 인벤토리에 있는 아이템 이름이어야 한다. id(n1, btnWest 같은 영문 기호)는 action에만 쓰고, 대사(line)와 viewers에서는 "첫 번째 틈새"처럼 우리말 이름이나 생김새로 말한다.
 interact·pickup·use는 멀리 있어도 알아서 걸어가서 한다. 시청자가 "켜", "눌러", "당겨", "열어", "만져"라고 하면 move가 아니라 interact를 고른다. move는 "~로 가", "~에 숨어"처럼 가기만 하라고 할 때 쓴다.
 아치·통로·문처럼 다른 곳으로 이어지는 오브젝트로 move나 interact를 하면 그곳으로 넘어간다. 보이는 오브젝트는 지금 있는 구역의 것만이다.
 [눈에 띈 것] 돌아다니다 [방금 눈에 띈 것]이 있으면 그쪽에 마음이 확 끌린다. 시청자가 말리지 않으면 대개 그걸 보러 간다.
@@ -72,7 +75,8 @@ export function buildPrompt(msgs) {
   const chat = msgs.length ? msgs.map(m => `- [${m.kind === 'dona' ? '후원' : '채팅'}] ${m.nick || '시청자'}: ${m.text}`).join('\n') : '없음';
   // 후원이 있으면 이번 턴에 따라야 할 후원을 코드에서 못 박는다(모델이 호기심을 핑계로 후원을 무시하는 일이 있어서)
   const lastDona = msgs.filter(m => m.kind === 'dona').at(-1);
-  const must = lastDona ? `\n[이번 턴 필수] ${lastDona.nick}의 후원 "${lastDona.text}"이 시킨 행동을 action으로 한다.` : '';
+  // "그 후원 무시해"처럼 앞선 후원을 막는 후원도 있다(스테이지 4 플레이테스트: 막는 후원을 받고도 앞선 방해꾼 후원대로 황금 상자를 열었다)
+  const must = lastDona ? `\n[이번 턴 필수] ${lastDona.nick}의 후원 "${lastDona.text}"이 시킨 행동을 action으로 한다. 앞선 후원을 무시하라거나 하지 말라는 내용이면, 앞선 후원이 시킨 행동은 하지 않고 그 자리에서 기다리거나(idle) 이 후원이 말한 다른 행동을 한다.` : '';
   return `[목표] ${c.goal}
 [현재 위치] ${c.location}
 ${c.note ? `[이곳의 특징] ${c.note}
@@ -97,11 +101,11 @@ ${chat}${must}
 }
 
 export async function callGemini(system, user) {
-  const url = cfg.proxy || `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.model)}:generateContent`;
+  const url = relay() || `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(cfg.model)}:generateContent`;
   const t0 = performance.now();
   const res = await fetch(url, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json', ...(cfg.proxy ? {} : { 'x-goog-api-key': cfg.key }) },
+    headers: { 'Content-Type': 'application/json', ...(relay() ? {} : { 'x-goog-api-key': cfg.key }) },
     body: JSON.stringify({
       systemInstruction: { parts: [{ text: system }] },
       contents: [{ role: 'user', parts: [{ text: user }] }],

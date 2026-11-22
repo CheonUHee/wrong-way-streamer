@@ -5,6 +5,7 @@ import * as tutorial from './tutorial.js';
 import * as core from './core.js';
 import * as view from './view3d.js';
 import * as viewers from './viewers.js';
+import { flag } from './env.js';
 import { STAGES, EXTRA } from './stages/index.js';
 
 let idx = 0, stage, S, playing = Promise.resolve(), busy = false;
@@ -26,7 +27,7 @@ view.onHazard(reason => {
   // 규칙 판정은 행동을 시작할 때 이미 끝나 있어서, 되돌리지 않으면 죽었는데도 다음 구역으로 넘어간다.
   if (busy && before) { Object.assign(S, before); syncInv(); }
   before = null;
-  core.kill(stage, S, reason, '굴러온 바위');
+  core.kill(stage, S, reason, stage.areas[S.area]?.hazard?.name || '굴러온 바위');   // hazard.name: 죽은 기록에 남을 이름(통 등)
   busy = true;
   const st = S;
   playing = dieAndRespawn(reason).catch(e => console.error(e)).finally(() => { if (st === S) { busy = false; tutorial.check(); } });
@@ -51,7 +52,7 @@ export function loadStage(i) {
   view.loadArea(stage, S, S.area, S.entry);
 }
 export function startFromUrl() {
-  const q = new URLSearchParams(location.search).get('stage');
+  const q = flag('stage');
   const extra = EXTRA.find(s => s.id === q);
   if (extra) { stage = extra; idx = -1; S = core.createState(stage); syncInv(); header(); view.loadArea(stage, S, S.area, S.entry); return; }
   const n = Math.max(0, Math.min(STAGES.length - 1, (parseInt(q, 10) || 1) - 1));

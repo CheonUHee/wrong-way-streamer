@@ -94,7 +94,7 @@ export default {
       wander: false,
       env: crypt({ w: 7, d: 24, h: 3.6, openings: { north: [{ x: 0, w: 1.6, h: 2.6, glow: 0xfff3d0 }], west: [{ x: 2, w: 2.2, h: 2.6, glow: 0x2e2620 }], east: [{ x: -6, w: 2.2, h: 2.6, glow: 0x2e2620 }] } }),
       aiNote: '좁은 지하 통로에 커다란 통이 주기적으로 굴러 내려온다. 통로 가운데에 있다가 통이 지나가면 맞고 쓰러진다. 양쪽 벽의 움푹 들어간 벽감 안은 안전하다. 너는 무서워서 시청자가 출발 신호를 주면 한 칸씩 움직이는 편이다.',
-      hazard: { model: BARREL, from: -11.5, to: 8, x: 0, lane: 4.6, radius: 1.1, lift: 1.08, speed: 10, period: 11, warn: 2, delay: 6,
+      hazard: { name: '굴러온 통', model: BARREL, from: -11.5, to: 8, x: 0, lane: 4.6, radius: 1.1, lift: 1.08, speed: 10, period: 11, warn: 2, delay: 6,
         warnText: '⚠ 덜컹덜컹… 통이 굴러온다!', reason: '통로 한가운데서 굴러온 통에 부딪혀 쓰러졌다' },
       entries: { start: { pos: [0, 10.2], look: [0, 1.4, -12] } },
       decor: [

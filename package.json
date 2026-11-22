@@ -1,0 +1,7 @@
+{
+  "name": "wrong-way-streamer",
+  "private": true,
+  "type": "module",
+  "description": "스트리머님, 거기 아닌데요! — 정적 웹 게임 + Gemini 중계 서버(api/gemini.js, Vercel)",
+  "engines": { "node": ">=20" }
+}

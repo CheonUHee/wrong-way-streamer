@@ -13,6 +13,7 @@ import { addLine, donate, esc, pick } from './ui.js';
 import { all, objectsIn } from './core.js';
 import { isPaused, isTest } from './pause.js';
 import * as tutorial from './tutorial.js';
+import { flag } from './env.js';
 
 export const ROLES = {
   troll:  { nicks: ['훈수빌런', '방해꾼999', 'ㅋㅋ장인', '반대로가'], color: '#ff7ab8' },
@@ -38,7 +39,7 @@ export function reset(st, stateFn) {
 
 // 한 명의 시청자가 말한다(채팅 또는 후원). 스트리머에게도 전달된다.
 // 개발용: 주소에 ?viewers=off 를 붙이면 방해꾼·조력자가 말하지 않는다(자동 테스트에서 행동이 끼어들지 않게)
-const OFF = new URLSearchParams(location.search).get('viewers') === 'off';
+const OFF = flag('viewers') === 'off';
 // 방해꾼 후원 사이 최소 간격(초). 후원이 몰려 플레이어가 ⚡로 맞설 틈도 없이 밀리는 것을 막는다
 const TROLL_DONA_GAP = 15;
 let lastTrollDona = -99;
