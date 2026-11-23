@@ -21,6 +21,8 @@ export const ROLES = {
 };
 const TROLL_GAP = [0, 50, 30, 18], HELPER_GAP = [0, 60, 40, 25];   // 레벨별 즉흥 대사 간격(초)
 const COUNTER = [0, 0.25, 0.45, 0.65];                             // 플레이어 훈수에 방해꾼이 받아칠 확률
+// 다른 시청자의 후원 금액. 금액에 따른 후원 경쟁은 아직 없어서(가장 나중 후원을 따름) 모두 플레이어와 같은 100으로 둔다
+const DONA_AMOUNT = 100;
 const DONA_RATE = [0, 0.1, 0.3, 0.5];                              // 방해꾼이 채팅 대신 후원으로 말할 확률
 
 let stage, getState, enqueue, fired = new Set(), armed = {}, nextTroll = 0, nextHelper = 0, lastCounter = -99;
@@ -62,7 +64,8 @@ function lure() {
   const s = getState(), objs = objectsIn(stage, s);
   const trap = objs.filter(o => (stage.rules || []).some(r => [].concat(r.target).includes(o.id) && [].concat(r.do || []).some(d => d.startsWith('die') || d.startsWith('enemy')))
     || (o.exit && stage.areas[o.exit.split('@')[0]]?.checkpoint === false));
-  const shiny = objs.filter(o => o.fx && (o.fx.glow || o.fx.sparkle || o.fx.anim));
+  const lit = fx => fx && !(fx.offWhen && all(s, fx.offWhen));   // offWhen으로 꺼진 빛은 치지 않는다
+  const shiny = objs.filter(o => o.fx && (lit(o.fx.glow) || lit(o.fx.sparkle) || o.fx.anim));
   // 단서(석판·명판)를 "개꿀템"이라고 꾀는 건 어색하다(Gemini 플레이테스트). 단서와 안내판은 뺀다
   // lure: false 인 것(오솔길 사이 지름길·돌아가는 길 같은 길 안내용 오브젝트)도 뺀다. "~(공터를 지나서) 개꿀템"은 어색하다
   const plain = objs.filter(o => o.kind !== 'sign' && !o.clue && o.lure !== false);
@@ -79,7 +82,7 @@ function helperLine() {
 function trollRandom(forceDona = false) {
   const o = lure(); if (!o) return;
   const dona = forceDona || Math.random() < DONA_RATE[lv('troll')];
-  speak('troll', pick(TROLL_LINES)(o.name), dona ? pick([1000, 3000, 5000, 10000]) : 0);
+  speak('troll', pick(TROLL_LINES)(o.name), dona ? DONA_AMOUNT : 0);
 }
 export const trollNow = () => ok() && trollRandom(true);   // 프로토타입 버튼용
 
@@ -92,7 +95,7 @@ export function onPlayerMessage(m) {
     // 플레이어 후원에는 후원으로 받아치되, 플레이어 지시가 먼저 실행된 뒤에 온다(가장 나중 후원이 이기므로 바로 오면 불공평)
     const dona = m.kind === 'dona' || Math.random() < DONA_RATE[lv('troll')];
     const delay = dona ? 6000 + Math.random() * 3000 : 1500 + Math.random() * 2500;
-    setTimeout(() => ok() && speak('troll', pick(TROLL_COUNTER), dona ? pick([1000, 3000, 5000]) : 0), delay);
+    setTimeout(() => ok() && speak('troll', pick(TROLL_COUNTER), dona ? DONA_AMOUNT : 0), delay);
   } else if (Math.random() < 0.2 * lv('helper')) {
     setTimeout(() => ok() && speak('helper', pick(HELPER_AGREE)), 1200 + Math.random() * 2000);
   }

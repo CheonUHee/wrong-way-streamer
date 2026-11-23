@@ -19,9 +19,11 @@ view.onWander(() => { if (S && !busy) { S.at = null; S.near = '구역 안을 돌
 view.onNotice(id => { if (S) S.noticed = id; });
 // 주기 위험(굴러온 바위)에 맞음: 재생 중인 행동을 끊고 쓰러진다
 let playToken = 0, before = null;
-const snapshot = s => structuredClone({ area: s.area, entry: s.entry, flags: s.flags, inv: s.inv, at: s.at, checkpoint: s.checkpoint, visited: s.visited, asking: s.asking });
+const snapshot = s => structuredClone({ area: s.area, entry: s.entry, flags: s.flags, inv: s.inv, at: s.at, checkpoint: s.checkpoint, visited: s.visited, asking: s.asking, cleared: s.cleared });
 view.onHazard(reason => {
-  if (!S || S.dead || S.cleared) return;
+  // 출구로 걸어가는 중에는 규칙이 이미 cleared를 세워 두었다. 그 걸음 중에 맞으면 클리어를 없던 일로 하고 쓰러진다
+  // (전에는 cleared면 맞아도 무시해서, 탈출로에서 출구로 달리면 통에 맞아도 살았다)
+  if (!S || S.dead || (S.cleared && !(busy && before))) return;
   playToken++; view.interrupt();
   // 행동 도중(예: 출구로 걸어가는 중)에 맞았으면 그 행동은 일어나지 않은 것으로 되돌린다.
   // 규칙 판정은 행동을 시작할 때 이미 끝나 있어서, 되돌리지 않으면 죽었는데도 다음 구역으로 넘어간다.

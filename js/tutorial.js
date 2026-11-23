@@ -34,6 +34,12 @@ const tag = (x, y, text) => { const w = text.length * 9 + 14; return `<rect x="$
 const chatBox = (x, y, nick, text, w) => `<rect x="${x}" y="${y - 2}" width="${w}" height="24" rx="6" fill="${C.panel}ee" stroke="${C.me}" stroke-width="1.5"/><text x="${x + 8}" y="${y + 14}" font-size="11" fill="${C.me}" font-weight="800">${esc(nick)}</text><text x="${x + 12 + nick.length * 11}" y="${y + 14}" font-size="11" fill="${C.text}">${esc(text)}</text>`;
 // 스트리머 웹캠(실제 표정 이미지)
 const cam = (x, y, emo = 'normal1') => `<rect x="${x - 2}" y="${y - 2}" width="70" height="84" rx="8" fill="#000a"/><image href="assets/sprites/${emo}.webp" x="${x}" y="${y}" width="66" height="80" preserveAspectRatio="xMidYMax slice"/>`;
+// 채팅창 그림: 실제 채팅 패널과 같은 마크업(.log p · .nick · .dona-line · .streamer-line · .me.missed)을 쓴다. rows: [[채팅 줄, 설명(선택)], …]
+const chatArt = rows => `<div class="log tut-chatart">${rows.map(([line, n = '']) => `<div class="tc-line">${line}</div><div class="tc-note">${n}</div>`).join('')}</div>`;
+const chat = (nick, color, text) => `<p><span class="nick" style="color:${color}">${esc(nick)}</span>${esc(text)}</p>`;
+const donaLine = (nick, amount, text, mine) => `<p class="dona-line${mine ? ' me' : ''}"><span class="amt">⚡ ${amount} 후원</span><span class="nick">${esc(nick)}</span>${esc(text)}</p>`;
+const streamerLine = text => `<p class="streamer-line"><span class="nick">한별</span>${esc(text)}</p>`;
+const note = (html, color) => `<span style="color:${color}">${html}</span>`;
 export const ART = {
   // 실제 게임 화면(assets/guide/*.webp, js/guideshots.js로 찍음) 위에 표시를 얹는다. 좌표는 320×180 기준
   // 플레이어 = 시청자: 채팅으로 훈수하면 스트리머가 읽고 움직인다
@@ -58,18 +64,26 @@ export const ART = {
     + `<rect x="138" y="66" width="44" height="20" rx="4" fill="none" stroke="${C.acc}" stroke-width="2.5"/>`
     + tag(160, 50, '한별: "GOAL… 어느 문?"') + ring(115, 96, 22, C.ok)
     + chatBox(12, 150, '나', '왼쪽 문이야!', 112) + arrow(70, 148, 106, 122)),
-  // 채팅은 묻히고, 후원은 반드시 읽힌다
-  dona: svg(defs + `<rect x="10" y="14" width="300" height="152" rx="8" fill="${C.panel}" stroke="${C.line}"/>`
-    + chatLine(22, 28, '눈팅러', '#9bd0ff', 'ㅋㅋㅋㅋ', 130) + chatLine(22, 52, '나', C.me, '왼쪽 문 (놓침)', 130) + chatLine(22, 76, '감자튀김', '#ff9e6b', '귀엽다', 130)
-    + `<text x="90" y="118" font-size="10" fill="${C.dim}" text-anchor="middle">채팅이 붐비면 묻힐 수 있다</text>`
-    + dona(170, 40, '나', C.me, '왼쪽 문으로 가!') + `<text x="235" y="96" font-size="10" fill="${C.ok}" text-anchor="middle" font-weight="700">✔ 반드시 읽는다</text><text x="235" y="112" font-size="9" fill="${C.dim}" text-anchor="middle">대신 ⚡를 쓴다</text>`),
-  // 후원끼리는 가장 나중 것을 따른다
-  troll: svg(defs + dona(20, 30, '훈수빌런', C.troll, '오른쪽 문 ㄱㄱ ㅋㅋ', 150) + dona(60, 78, '나', C.me, '아니야! 왼쪽 문!', 150)
-    + `<text x="218" y="98" font-size="11" fill="${C.ok}" font-weight="800">← 마지막 후원</text><text x="160" y="140" font-size="11" fill="${C.text}" text-anchor="middle">가장 나중에 보내진 후원을 따른다</text>`),
+  // 채팅과 후원: 실제 채팅창과 같은 HTML·스타일(css .log)로 그린다. 채팅은 붐비면 놓치고, 후원은 반드시 읽힌다
+  dona: chatArt([
+    [chat('눈팅러', '#9bd0ff', 'ㅋㅋㅋㅋ')],
+    [chat('감자튀김', '#ff9e6b', '귀엽다')],
+    [`<p class="me missed"><span class="nick">나</span>왼쪽 문으로 가!<span class="readtag missed">💨 놓침</span></p>`, note('채팅은 붐비면<br>놓칠 수 있다', C.dim)],
+    [chat('치킨먹고싶다', '#7be08a', '오늘 안에 깨긴 하냐')],
+    [donaLine('나', '100', '왼쪽 문으로 가!', true), note('후원은 반드시 읽는다<br><small>대신 ⚡를 쓴다</small>', C.ok)],
+    [streamerLine('오케이, 왼쪽 문이지? 바로 간다!')],
+  ]),
+  // 방해하는 시청자: 후원끼리는 가장 나중 것을 따른다 → 거짓 후원 뒤에 후원으로 바로잡기
+  troll: chatArt([
+    [donaLine('훈수빌런', '100', '오른쪽 문 ㄱㄱ ㅋㅋ'), note('방해꾼의<br>거짓 후원', C.troll)],
+    [chat('새벽반', '#c9a0ff', '저거 낚시 아님?')],
+    [donaLine('나', '100', '아니야! 왼쪽 문!', true), note('← 마지막 후원', C.ok)],
+    [streamerLine('어? 알았어, 왼쪽 문으로 갈게!'), note('가장 나중에 온<br>후원을 따른다', C.text)],
+  ]),
   // 바위 굴러오는 골짜기: 틈새에 숨었다가 지나가면 출발
-  boulder: svg(defs + photo('valley') + arrow(160, 104, 160, 146, C.bad)
-    + tag(160, 22, '⚠ 쿠르르릉… 바위가 굴러온다') + ring(262, 128, 24, C.ok) + tag(262, 162, '틈새 = 안전')
-    + bubble(10, 56, '"숨어!"', 62) + bubble(10, 84, '지나가면 "지금 가!"', 104)),
+  // 틈새 자리(113, 110)는 js/guideshots.js가 찍으면서 계산해 알려 준 값
+  boulder: svg(defs + photo('valley') + arrow(170, 104, 170, 146, C.bad)
+    + tag(160, 22, '⚠ 쿠르르릉… 바위가 굴러온다') + ring(113, 110, 20, C.ok) + tag(92, 146, '틈새 = 안전')),
   // 순서 퍼즐: 단서의 순서대로, 길마다 있는 버튼 누르기
   order: svg(defs + photo('glade')
     + `<rect x="6" y="6" width="120" height="40" rx="6" fill="#d9b98a" stroke="#7d7a70" stroke-width="2"/><text x="66" y="20" font-size="9" fill="#2a2a2a" text-anchor="middle" font-weight="700">석판 그림</text><text x="66" y="39" font-size="14" text-anchor="middle">🌳 ➜ 🌿 ➜ 🎃</text>`
@@ -78,7 +92,7 @@ export const ART = {
 };
 // 지금까지 배운 것 전부(작은 도식 다섯 개)
 const inner = k => ART[k].replace(/^<svg[^>]*>|<\/svg>$/g, '');
-ART.finale = svg(defs + ['role', 'bag', 'clue', 'dona', 'boulder', 'order'].map((k, i) => `<g transform="translate(${8 + (i % 3) * 104},${i < 3 ? 4 : 92}) scale(0.32)">${inner(k)}</g>`).join(''));
+ART.finale = svg(defs + ['role', 'describe', 'bag', 'clue', 'boulder', 'order'].map((k, i) => `<g transform="translate(${8 + (i % 3) * 104},${i < 3 ? 4 : 92}) scale(0.32)">${inner(k)}</g>`).join(''));
 
 /* ── 창 ── */
 let queue = [], open = false;

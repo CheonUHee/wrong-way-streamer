@@ -90,10 +90,23 @@ function matches(r, a, o, s) {
 // 함정: 규칙에 die·enemy가 있는 오브젝트(또는 approach: true). approach: false로 끌 수 있다.
 export const isTrap = (stage, o) => o.approach ?? rulesOf(stage).some(r => [].concat(r.target).includes(o.id) && [].concat(r.do || []).some(d => /^(die|enemy)(:|$)/.test(d)));
 
+// 죽음 학습 2단계: 쓰러지게 한 물건과 '비슷한' 물건(같은 kind, 예: chest)을 찾는다. 있으면 그 물건 이름을 돌려준다
+export function alikeKiller(stage, s, o) {
+  if (!o.kind || o.kind === 'spot') return null;
+  for (const d of s.deaths) {
+    if (!d.objId || d.objId === o.id) continue;
+    const k = objectById(stage, d.objId);
+    if (k && k.kind === o.kind) return k.name;
+  }
+  return null;
+}
+
 export function perform(stage, s, a) {
   const effects = [];
   if (s.cleared || s.dead) return { result: '지금은 움직일 수 없다', effects };
   // explore: 정한 대상 없이 구역 안을 돌아다니며 둘러본다(화면에서 배회 지점으로 걷는다)
+  // 굴러오는 위험이 있는 구역에서는 둘러보러 나가지 않고 그 자리에서 고개만 돌린다(틈새에서 나와 맞는 일이 있었다)
+  if (a.type === 'explore' && stage.areas[s.area]?.hazard) return { result: '무서워서 그 자리에서 고개만 내밀고 주변을 둘러봤다', effects };
   if (a.type === 'explore') { s.at = null; s.near = '구역 안을 돌아다니며 둘러보는 중'; return { result: '주변을 두리번거리며 돌아다녔다', effects: [{ type: 'explore' }] }; }
   const o = objectsIn(stage, s).find(v => v.id === a.target);
   if (a.type === 'idle' || !o) return { result: '제자리에 서 있다', effects };
@@ -111,6 +124,15 @@ export function perform(stage, s, a) {
   }
 
   if (a.type === 'use' && (!a.item || !s.inv.includes(a.item))) return { result: '그런 아이템은 갖고 있지 않다', effects };
+
+  // 죽음 학습 2단계: 쓰러지게 한 물건과 비슷한 물건은 처음 손댈 때 멈칫하고 시청자에게 묻는다. 한 번 물은 뒤에는 손댄다
+  const alike = a.type !== 'move' && alikeKiller(stage, s, o);
+  if (alike && !(s.wary ||= []).includes(o.id)) {
+    s.wary.push(o.id);
+    const q = `${o.name}${josa(o.name, '이', '가')} 아까 ${alike}${josa(alike, '이랑', '랑')} 비슷하게 생겼어… 이것도 함정 아니야? 만져도 돼?`;
+    s.asking = q; effects.push({ type: 'ask', text: q });
+    return { result: `${o.name}에 손을 뻗다가 멈칫했다. 아까 쓰러지게 한 ${alike}${josa(alike, '과', '와')} 비슷하게 생겼다`, effects };
+  }
 
   const r = rulesOf(stage).find(r => matches(r, a, o, s));
   if (!r) {
@@ -176,7 +198,15 @@ export function lessonOf(stage, d) {
 /* ── AI에게 줄 상황 정보 ── */
 export function promptContext(stage, s) {
   const killed = new Set(s.deaths.map(d => d.objId).filter(Boolean));
-  const objs = objectsIn(stage, s).map(o => `- ${o.id}: ${describe(s, o)}${s.seen.includes(o.id) ? '' : ' (아직 가까이서 안 봄)'}${killed.has(o.id) ? ' (⚠ 전에 이걸 건드렸다가 쓰러졌다)' : ''}`);
+  const alikeTag = o => { const k = !killed.has(o.id) && alikeKiller(stage, s, o); return k ? ` (⚠ 전에 쓰러지게 한 ${k}${josa(k, '과', '와')} 비슷하게 생겼다. 손대기 전에 시청자에게 물어본다)` : ''; };
+  // 통로(exit)는 어디로 이어지는지와 그곳에 있는 물건을 붙인다: 곁방에서는 대전당의 철창문이 안 보여 어디로 가야 할지 몰랐다(스테이지 4)
+  const leadsTo = o => {
+    if (!o.exit) return '';
+    // 함정(황금 상자 등)은 적지 않는다: 이 안내가 또 하나의 유혹이 되지 않게
+    const area = o.exit.split('@')[0], names = [...new Set(objectsIn(stage, { ...s, area }).filter(v => !v.exit && !isTrap(stage, v)).map(v => v.name))].slice(0, 6);
+    return ` → ${areaName(stage, area)}${names.length ? `(${names.join('·')}${josa(names.at(-1), '이', '가')} 있는 곳)` : ''}`;
+  };
+  const objs = objectsIn(stage, s).map(o => `- ${o.id}: ${describe(s, o)}${leadsTo(o)}${s.seen.includes(o.id) ? '' : ' (아직 가까이서 안 봄)'}${killed.has(o.id) ? ' (⚠ 전에 이걸 건드렸다가 쓰러졌다)' : alikeTag(o)}`);
   const at = s.at ? objectById(stage, s.at)?.name + ' 앞' : (s.near || '입구 근처');
   const n = s.noticed && objectsIn(stage, s).find(o => o.id === s.noticed);
   return {
@@ -191,7 +221,7 @@ export function promptContext(stage, s) {
     noticed: n ? `${n.id}: ${describe(s, n)}` : '',
     history: s.history.join('\n') || '없음',
     done: (s.done || []).filter(d => d.set.every(f => s.flags[f]) && d.unset.every(f => !s.flags[f])).slice(-6).map(d => `- ${d.text}`).join('\n'),
-    heard: (s.heard || []).map((h, i, a) => i === a.length - 1 && a.length > 1 ? `${h}  ← 가장 최근` : h).join('\n'),
+    heard: (s.heard || []).filter(h => Date.now() - h.at < 150000).map((h, i, a) => i === a.length - 1 && a.length > 1 ? `${h.text}  ← 가장 최근` : h.text).join('\n'),
     deaths: s.deaths.length
       ? s.deaths.map((d, i) => `- ${i + 1}번째: ${areaName(stage, d.area)}의 ${d.obj} 쪽에서 ${d.reason} → 배운 것: ${lessonOf(stage, d)}`).join('\n')
       : '없음',

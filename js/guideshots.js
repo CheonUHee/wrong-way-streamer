@@ -10,7 +10,7 @@ const SCENES = [
   ['room2', 0, 'room2', [-0.4, 2.9], [0.8, 0.8, -4], 0.1],           // 책상 위 열쇠(오른쪽) · 잠긴 문
   ['room3', 0, 'room3', [0, 3.3], [0, 1.3, -4], 0.15],               // 두 문과 안내판
   ['glade', 1, 'glade', [0, 1.2], [0, -40, 0.6], 15],                // 갈림길 공터를 바로 위에서
-  ['valley', 2, 'lower', [1.0, 25], [-0.6, 1.4, -10], 1.2, () => { const h = window.__hz(); return h.phase === 'roll' && h.mesh.position.z > 0 && h.mesh.position.z < 7; }],   // 굴러오는 바위와 왼쪽 틈새
+  ['valley', 2, 'lower', [1.2, 24], [-1.0, 1.3, 6], 1.0, () => { const h = window.__hz(); return h.phase === 'roll' && h.mesh.position.z > 1 && h.mesh.position.z < 8; }, [-3.4, 0.9, 15]],   // 굴러오는 바위와 왼쪽 두 번째 틈새
 ];
 const wait = ms => new Promise(r => setTimeout(r, ms));
 
@@ -28,7 +28,7 @@ async function save(name, dataUrl) {
 
 window.__guideShots = async (only) => {
   const out = [];
-  for (const [name, idx, area, pos, look, h, until] of SCENES) {
+  for (const [name, idx, area, pos, look, h, until, mark] of SCENES) {
     if (only && !only.includes(name)) continue;
     if (St.stageIndex() !== idx) { St.loadStage(idx); await wait(4000); }
     if (St.state().area !== area) { St.jumpArea(area); await wait(3000); }
@@ -36,7 +36,12 @@ window.__guideShots = async (only) => {
     window.__view(pos, look, h); await wait(900);
     if (until) for (let t = 0; t < 400 && !until(); t++) await wait(50);   // 최대 20초
     window.__view(pos, look, h); await wait(120);
-    out.push(await save(name, window.__shot()));
+    const shot = window.__shot();
+    // mark: 그림 위 표시를 놓을 자리(월드 좌표) → 320×180 그림 좌표로 알려 준다(tutorial.js ART에 옮겨 적는다)
+    if (mark) { const [nx, ny, cw, ch] = window.__project(...mark), r = Math.min(cw / 640, ch / 360), sw = 640 * r, sh = 360 * r;
+      const px = ((nx + 1) / 2 * cw - (cw - sw) / 2) / sw * 320, py = ((1 - ny) / 2 * ch - (ch - sh) / 2) / sh * 180;
+      out.push(`${name} 표시 자리: (${px.toFixed(0)}, ${py.toFixed(0)})`); }
+    out.push(await save(name, shot));
   }
   window.__arms(true);
   return out;

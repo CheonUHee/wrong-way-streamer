@@ -305,3 +305,11 @@ body.testing .streamer, body.testing .bubble { opacity: .25; }
 /* 배포 모드(js/env.js): 개발용 화면을 숨긴다. 내 컴퓨터에서 보거나 주소 뒤에 ?dev를 붙이면 다시 보인다 */
 .release #testBtn, .release #testPanel, .release #guideBtn, .release #aiChip, .release #settingsBtn,
 .release .proto, .release .streamer .tag { display: none !important; }
+
+/* 플레이 가이드의 채팅창 그림(js/tutorial.js chatArt): 실제 채팅 패널 스타일(.log)을 그대로 쓰고, 오른쪽에 설명을 단다 */
+.tut-art .tut-chatart { width: 100%; height: 100%; box-sizing: border-box; overflow: hidden; background: var(--panel);
+  display: grid; grid-template-columns: minmax(0, 1fr) 30%; align-content: center; gap: 4px 10px; padding: 10px 12px; font-size: 12px; line-height: 1.35; }
+.tut-chatart .tc-note { align-self: center; font-size: 11px; font-weight: 800; line-height: 1.3; }
+.tut-chatart .tc-note small { font-weight: 500; opacity: .8; }
+.tut-chatart .dona-line { padding: 4px 8px; }
+.tut-chatart .dona-line .amt { font-size: 10.5px; }

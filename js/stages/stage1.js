@@ -144,7 +144,7 @@ export default {
     script: [
       { role: 'helper', when: ['area:room1', '!door1Open'], delay: 35, text: '저 빨간 버튼 누르라고 해 봐' },
       // 한별이 물은 직후에 끼어든다: 플레이어가 대답하기 전에 후원이 오면 '후원은 반드시 읽힌다'를 바로 겪는다(Gemini 플레이테스트: 10초 뒤면 이미 클리어해서 후원을 못 봄)
-      { role: 'troll', when: 'area:room3', delay: 2.5, text: '오른쪽 문 ㄱㄱ 과녁 붙은 게 출구임 ㅋㅋ', dona: 3000 },
+      { role: 'troll', when: 'area:room3', delay: 2.5, text: '오른쪽 문 ㄱㄱ 과녁 붙은 게 출구임 ㅋㅋ', dona: 100 },
     ],
   },
 

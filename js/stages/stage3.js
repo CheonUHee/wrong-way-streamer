@@ -29,7 +29,7 @@ export default {
   arrive: { say: '숲을 빠져나왔더니 골짜기네… 저 위에서 뭐가 굴러오는 소리 안 나?', history: '숲속 공터의 바위 길을 지나 숲을 빠져나오자 바위 절벽 골짜기 아래에 도착했다' },
   aiNote: NOTE,
 
-  items: { coin: { icon: '🪙', name: '금화 한 닢' } },
+  items: {},
 
   areas: {
     lower: {
@@ -108,12 +108,7 @@ export default {
     // ── 아랫길 ──
     ...NICHES.map(([x, z], i) => spot(`n${i + 1}`, 'lower', `${ORD[i]} 번째 틈새`, x, z,
       `${x > 0 ? '오른쪽' : '왼쪽'} 절벽의 ${ORD[i]} 번째 바위 틈새${i === 0 ? '(가장 가까움)' : i === NICHES.length - 1 ? '(맨 위쪽, 오르막 끝 바로 앞)' : ''}`)),
-    {
-      id: 'coin', area: 'lower', name: '금화', showIf: '!coinTaken',
-      model: { pack: 'dungeon', name: 'coin_stack_small', scale: 0.7 }, pos: [0.4, 0, 20.5], stand: [0.4, 21.5], look: [0.4, 0.2, 20.5], solid: false,
-      fx: { glow: { color: 0xffd65a, intensity: 2.5 }, sparkle: {} },
-      desc: '길 한가운데에 떨어져 반짝이는 금화',
-    },
+    // 금화는 뺐다(2026-11-23): 줍지도 않았는데 주웠다고 말하거나 바위 길로 꾀어 짜증만 났다
     {
       id: 'topLower', area: 'lower', name: '오르막 끝', kind: 'spot', solid: false, exit: 'upper@start',
       pos: [0, 0, -35.6], stand: [0, -35.4], look: [0, 2, -40],
@@ -146,7 +141,6 @@ export default {
     ...NICHES.map((_, i) => ({ target: `n${i + 1}`, on: ['move', 'interact'], say: `${ORD[i]} 번째 바위 틈새에 쏙 숨었다. 여기는 안전하다` })),
     { target: 'u1', on: ['move', 'interact'], say: '폐허 왼쪽 바위 틈새에 쏙 숨었다. 여기는 안전하다' },
     { target: 'lever', on: 'move', say: '레버가 있는 오른쪽 틈새에 쏙 숨었다. 여기는 안전하다' },
-    { target: 'coin', on: ['pickup', 'interact'], do: ['set:coinTaken', 'give:coin'], say: '길 한가운데서 금화를 주웠다' },
     { target: 'chest', if: '!chestOpen', do: ['set:chestOpen'], say: '상자를 열어 봤지만 텅 비어 있다' },
     { target: 'chest', say: '빈 상자다' },
     { target: 'lever', if: '!gateOpen', do: ['set:gateOpen', 'checkpoint'], say: '레버를 당기자 끼기긱… 정면의 철창문이 위로 올라갔다!' },
@@ -158,7 +152,7 @@ export default {
   viewers: {
     troll: 2, helper: 1,
     script: [
-      { role: 'troll', when: ['area:lower', 'at:n1'], delay: 5, text: '틈새 왜 숨음 ㅋㅋ 그냥 맨 위까지 한 번에 뛰어', dona: 2000 },
+      { role: 'troll', when: ['area:lower', 'at:n1'], delay: 5, text: '틈새 왜 숨음 ㅋㅋ 그냥 맨 위까지 한 번에 뛰어', dona: 100 },
       { role: 'helper', when: 'dead:1', delay: 4, text: '바위 지나가자마자 바로 출발해야 함' },
       { role: 'troll', when: 'area:upper', delay: 9, text: '가운데 상자 열어봐 보물 있음 ㅋㅋ' },
       { role: 'helper', when: ['area:upper', '!gateOpen'], delay: 40, text: '오른쪽 틈새 안에 레버 같은 거 보임' },

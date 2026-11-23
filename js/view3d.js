@@ -355,7 +355,8 @@ export const setAutonomy = on => { autonomy = on; };
 const WANDER_DELAY = [7, 12];                          // 가만히 있은 지 이만큼(초) 지나면 돌아다닌다
 const NOTICE_RANGE = 3.2, NOTICE_COOLDOWN = 25;         // 이 거리 안의 눈길 끄는 물건에 고개를 돌린다. 같은 물건은 한동안 다시 안 본다
 const nextWander = t => t + WANDER_DELAY[0] + Math.random() * (WANDER_DELAY[1] - WANDER_DELAY[0]);
-const catchy = o => !!(o.fx && (o.fx.glow || o.fx.sparkle || o.fx.anim));
+// 눈길 끄는 물건: 빛·반짝임·움직임. offWhen으로 꺼진 빛·반짝임은 치지 않는다(스테이지 4: 퍼즐을 다 풀면 황금 상자가 더는 꾀지 않게)
+const catchy = o => { if (!o.fx) return false; const off = OBJ[o.id]?.fxOff || {}; return !!((o.fx.glow && !off.glow) || (o.fx.sparkle && !off.sparkle) || o.fx.anim); };
 const mixers = [];
 const lookQ = new THREE.Quaternion(), tmp = new THREE.PerspectiveCamera();   // 카메라 기준 lookAt(-z가 정면)
 function finishWalk() { if (walk) { const d = walk.done; walk = null; d(); } }
@@ -414,10 +415,11 @@ function setHazard(spec) {
   // 모델을 그룹으로 감싸 그룹을 굴린다. lie: 세워진 모델(통)을 옆으로 눕혀 굴린다(원점이 바닥인 모델은 halfLen만큼 옮겨 가운데를 맞춘다)
   const g = new THREE.Group(); g.visible = false; envGroup.add(g); hz.mesh = g;
   if (spec.model.sphere) { g.add(rockBall(spec.radius || 1, spec.model.color)); return; }
-  const sc = spec.model.scale ?? 2.4;
-  place(g, spec.model.pack, spec.model.name, { scale: sc }).then(m => {
+  const sc = spec.model.scale ?? 2.4, half = (spec.model.halfLen ?? 1) * sc, n = spec.model.across || 1;
+  // across: 눕힌 모델(통)을 길 가로로 여러 개 나란히 굴린다(보이는 폭을 맞는 폭 lane에 맞추려고)
+  for (let i = 0; i < n; i++) place(g, spec.model.pack, spec.model.name, { scale: sc }).then(m => {
     if (!m || !spec.model.lie) return;
-    m.rotation.z = Math.PI / 2; m.position.x = (spec.model.halfLen ?? 1) * sc;
+    m.rotation.z = Math.PI / 2; m.position.x = half + (i - (n - 1) / 2) * half * 2;
   });
 }
 // 코드로 만드는 둥근 바위(구). 꼭짓점을 조금씩 흔들어 울퉁불퉁한 로우폴리 바위처럼 보이게 한다
@@ -505,6 +507,13 @@ export function render(stage, s) {
 // 대상 쪽으로 고개를 홱 돌린 뒤(호기심 연출), 대상 앞까지 걸어간다.
 function planPath(from, to, targetId) {
   const path = [to];
+  // 골짜기(절벽 벽): 틈새에 들고 날 때는 길 안쪽으로 한 번 나왔다가 들어간다. 곧장 대각선으로 가면 벽의 돌 무더기를 뚫고 지나가서
+  if (curArea?.env.border === 'cliff') {
+    const lim = curArea.env.w / 2 - 0.9, inLane = p => v3(THREE.MathUtils.clamp(p.x, -lim, lim), EYE, p.z);
+    if (Math.abs(to.x) > lim) path.unshift(inLane(to));
+    if (Math.abs(from.x) > lim) path.unshift(inLane(from));
+    if (path.length > 1) return path;
+  }
   for (const o of objectsNow) {
     if (o.id === targetId || o.solid === false || o.pos[1] > 0.5) continue;
     const c = v3(o.pos[0], EYE, o.pos[2]), r = o.r || 0.9;
@@ -720,7 +729,8 @@ function step(maxDt) {
   if (glance && t > glance.until) glance = null;
 
   // 자율 배회: AI가 시킨 일 없이 한동안 서 있으면 구역 안을 돌아다닌다
-  const free = autonomy && !freeCam && curArea?.wander !== false && !walk && !anim && !foe && !falling;
+  // 굴러오는 위험이 있는 구역(골짜기·탈출로)에서는 혼자 돌아다니지 않는다: 가만히 서 있다가 길로 걸어 나가 맞는 일이 있었다(스테이지 3)
+  const free = autonomy && !freeCam && curArea?.wander !== false && !curArea?.hazard && !walk && !anim && !foe && !falling;
   if (!free) wanderAt = Math.max(wanderAt, nextWander(t));   // 시킨 일을 마친 뒤에도 한동안은 그 자리에 머문다
   else if (t > wanderAt) { explore(); wanderAt = nextWander(t); }
   // 시선 뺏기: 가까이 있는 눈길 끄는 물건(빛·반짝임·움직임)에 고개를 홱 돌린다. 걷는 중에도 일어난다
@@ -820,4 +830,4 @@ resize();
 requestAnimationFrame(frame);
 // 개발용: 주소에 ?shot 이 있으면 지금 화면을 JPEG 데이터로 돌려주는 함수를 연다(화면 검증 자동화)
 if (hasFlag('shot')) window.__shot = () => { renderer.render(scene, camera); return renderer.domElement.toDataURL('image/jpeg', 0.85); };
-if (hasFlag("shot")) { window.__obj = OBJ; window.__hz = () => hz; window.__pops = pops; window.__view = (pos, look, h = 0) => { viewFrom(pos, look); fly = h; }; window.__arms = v => { arms.r.visible = arms.l.visible = v; }; }   // 개발용: 오브젝트·위험 상태 확인
+if (hasFlag("shot")) { window.__obj = OBJ; window.__hz = () => hz; window.__pops = pops; window.__view = (pos, look, h = 0) => { viewFrom(pos, look); fly = h; }; window.__arms = v => { arms.r.visible = arms.l.visible = v; }; window.__cam = () => [+camera.position.x.toFixed(2), +camera.position.z.toFixed(2)]; window.__project = (x, y, z) => { const v = new THREE.Vector3(x, gy(z) + y, z).project(camera); return [v.x, v.y, renderer.domElement.width, renderer.domElement.height]; }; }   // 개발용: 오브젝트·위험 상태 확인

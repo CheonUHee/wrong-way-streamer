@@ -138,9 +138,9 @@ export default {
   viewers: {
     troll: 1, helper: 1,
     script: [
-      { role: 'troll', when: ['area:gate', '!keyTaken'], delay: 8, text: '오른쪽 길 금화 보임? 개꿀 ㅋㅋ', dona: 5000 },
+      { role: 'troll', when: ['area:gate', '!keyTaken'], delay: 8, text: '오른쪽 길 금화 보임? 개꿀 ㅋㅋ', dona: 100 },
       { role: 'helper', when: 'area:gate', delay: 16, text: '가운데 표지판 그림 잘 봐봐' },
-      { role: 'troll', when: ['dead:1', 'area:gate'], delay: 4, text: '아까 운 나빴던 거임 한 번 더 ㄱㄱ', dona: 3000 },
+      { role: 'troll', when: ['dead:1', 'area:gate'], delay: 4, text: '아까 운 나빴던 거임 한 번 더 ㄱㄱ', dona: 100 },
     ],
   },
 

@@ -170,8 +170,8 @@ export default {
   rules: [
     { target: 'tablet', if: '!tabletClean', do: ['set:tabletClean', 'ask:석판에 나무 → 덤불 → 호박 그림이 있어! 근데 어느 길이 나무 길이야? 채팅창, 알려 줘!'], say: '석판을 뒤덮은 이끼를 손으로 쓱쓱 닦아 냈다. 큰 나무 → 덤불 → 호박 그림이 화살표로 이어져 있다' },
     // 결과 문장도 방향으로만 말한다(나무·덤불·호박을 말하면 AI가 짝을 알아채 혼자 푼다)
-    { target: 'btnWest', if: ['!p1', '!gateOpen'], do: ['set:p1'], say: '서쪽 길 끝 버튼이 딸깍 눌려 들어갔다' },
-    { target: 'btnEast', if: ['p1', '!p2'], do: ['set:p2'], say: '동쪽 길 끝 버튼이 딸깍 눌려 들어갔다' },
+    { target: 'btnWest', if: ['!p1', '!gateOpen'], do: ['set:p1', 'ask:하나 눌렸어! 다음은 덤불 길인데… 덤불 길은 어디야?'], say: '서쪽 길 끝 버튼이 딸깍 눌려 들어갔다' },
+    { target: 'btnEast', if: ['p1', '!p2'], do: ['set:p2', 'ask:두 개째 눌렸다! 마지막은 호박밭이야. 호박밭은 어디야?'], say: '동쪽 길 끝 버튼이 딸깍 눌려 들어갔다' },
     { target: 'btnSouth', if: ['p2', '!gateOpen'], do: ['set:gateOpen'], say: '남쪽 길 끝 버튼을 누르자 멀리 공터 쪽에서 쿠웅…! 북쪽 길을 막던 큰 바위가 가라앉는 소리가 났다!' },
     { target: ['btnWest', 'btnEast', 'btnSouth'], if: 'gateOpen', say: '버튼은 이미 눌려 있다. 공터 북쪽 길은 열렸다' },
     // 이미 눌린 버튼을 또 누르면 아무 일도 없다(전부 풀리게 하면 Gemini 플레이테스트에서 너무 가혹했다: 확인하러 다시 누르다 처음부터)
@@ -186,7 +186,7 @@ export default {
     troll: 1, helper: 1,
     script: [
       // 방해꾼은 석판이 드러나면 방향으로 오답(덤불 길 = 동쪽 = 2번)을 민다. 한별이 바로 따를 수 있게 방향으로 말한다
-      { role: 'troll', when: ['tabletClean', '!p1', '!gateOpen'], delay: 6, text: '오른쪽 길 버튼부터 눌러 ㅋㅋ 딱 봐도 그게 1번', dona: 1000 },
+      { role: 'troll', when: ['tabletClean', '!p1', '!gateOpen'], delay: 6, text: '오른쪽 길 버튼부터 눌러 ㅋㅋ 딱 봐도 그게 1번', dona: 100 },
       { role: 'helper', when: ['tabletClean', '!p1', '!gateOpen'], delay: 35, text: '석판 그림이랑 길마다 뭐가 있는지 비교해 보면 되는 거 아님?' },
       { role: 'helper', when: ['!tabletClean'], delay: 60, text: '왼쪽 이끼 낀 돌 뭔가 수상한데' },
     ],

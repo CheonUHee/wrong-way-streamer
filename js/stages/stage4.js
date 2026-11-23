@@ -17,12 +17,12 @@ const candle = (id, name, pos, stand, lit, desc) => ({
   fx: { glow: { color: 0xffa040, intensity: 2.5, offWhen: `!${lit}` }, flame: { at: WICKS, offWhen: `!${lit}` } },
 });
 const CANDLES = ['candleFarRight', 'candleNearRight', 'candleFar', 'candleLeft'];
-const BARREL = { pack: 'dungeon', name: 'barrel_large', scale: 1.2, lie: true, halfLen: 1 };
+const BARREL = { pack: 'dungeon', name: 'barrel_large', scale: 1.2, lie: true, halfLen: 1, across: 2 };   // 통 두 개가 나란히(폭 4.8m) 굴러온다
 
 export default {
   id: 'stage4',
   title: '해골 묘지의 지하 대전당',
-  goal: '철창문을 열고 지하 대전당을 탈출하기',
+  goal: '철창문을 열고, 바깥 출구로 나가기',
   start: { area: 'hall', entry: 'start' },
   // 이어지는 여정: 앞 스테이지를 깨고 넘어왔을 때 한별의 첫마디, AI에게 알려 주는 지난 일
   arrive: { say: '납골당 계단으로 내려왔더니… 여기 완전 지하 대전당인데?!', history: '골짜기 꼭대기 철창문 너머 묘지의 납골당 계단을 내려와 지하 대전당에 들어섰다' },
@@ -93,9 +93,11 @@ export default {
       name: '무너지는 탈출로',
       wander: false,
       env: crypt({ w: 7, d: 24, h: 3.6, openings: { north: [{ x: 0, w: 1.6, h: 2.6, glow: 0xfff3d0 }], west: [{ x: 2, w: 2.2, h: 2.6, glow: 0x2e2620 }], east: [{ x: -6, w: 2.2, h: 2.6, glow: 0x2e2620 }] } }),
-      aiNote: '좁은 지하 통로에 커다란 통이 주기적으로 굴러 내려온다. 통로 가운데에 있다가 통이 지나가면 맞고 쓰러진다. 양쪽 벽의 움푹 들어간 벽감 안은 안전하다. 너는 무서워서 시청자가 출발 신호를 주면 한 칸씩 움직이는 편이다.',
-      hazard: { name: '굴러온 통', model: BARREL, from: -11.5, to: 8, x: 0, lane: 4.6, radius: 1.1, lift: 1.08, speed: 10, period: 11, warn: 2, delay: 6,
-        warnText: '⚠ 덜컹덜컹… 통이 굴러온다!', reason: '통로 한가운데서 굴러온 통에 부딪혀 쓰러졌다' },
+      aiNote: '좁은 지하 통로에 커다란 통이 주기적으로 굴러 내려온다. 통로 가운데에 있다가 통이 지나가면 맞고 쓰러진다. 양쪽 벽의 움푹 들어간 벽감 안은 안전하다. 너는 무서워서 시청자가 출발 신호를 주면 한 칸씩 움직이는 편이다. 철창문은 이미 지나왔고, 통로 끝의 바깥 출구로 나가면 탈출이다.',
+      hazard: { name: '굴러온 통', model: BARREL, from: -11.5, to: 8, x: 0, lane: 5.4,   // 맞는 폭: 벽감(|x| 3 이상)만 빼고 통로 전체
+        radius: 1.1, lift: 1.08, speed: 10, period: 11, warn: 2, delay: 6,
+        warnText: '⚠ 덜컹덜컹… 통이 굴러온다!', reason: '통로 한가운데서 굴러온 통에 부딪혀 쓰러졌다',
+        lesson: '덜컹덜컹 소리가 날 때 통로 한가운데에 있으면 통에 맞는다. 소리가 나면 벽감에 숨고, 통이 지나간 뒤에 한 칸씩 움직인다' },
       entries: { start: { pos: [0, 10.2], look: [0, 1.4, -12] } },
       decor: [
         ['dungeon', 'torch_mounted', [-3.4, 2, 6], Math.PI / 2],
@@ -112,7 +114,7 @@ export default {
       id: 'gate', area: 'hall', name: '철창문', sinkWhen: 'gateOpen', sinkDepth: -3.3,
       model: { pack: 'dungeon', name: 'wall_gated', scale: 0.8 },
       pos: [0, 0, -5.95], stand: [0, -4.4], look: [0, 1.6, -6],
-      desc: [['gateOpen', '정면의 철창문. 위로 올라가 열려 있다'], ['unlocked', '정면의 커다란 철창문. 자물쇠는 풀렸지만 철창이 내려와 있다'], '정면의 커다란 철창문. 해골 모양 자물쇠가 달려 있다'],
+      desc: [['gateOpen', '정면의 철창문. 위로 올라가 열려 있다. 지나가면 탈출로로 이어진다'], ['unlocked', '정면의 커다란 철창문. 자물쇠는 풀렸지만 철창이 내려와 있다'], '정면의 커다란 철창문. 해골 모양 자물쇠가 달려 있다'],
     },
     {
       id: 'lever', area: 'hall', name: '레버', kind: 'lever', downWhen: 'gateOpen', shinyWhen: 'oiled',
@@ -128,7 +130,7 @@ export default {
       poke: '명판에 해골 → 호박 → 관 → 뼈 그림이 새겨져 있다. 무슨 순서일까?',
     },
     { id: 'westPass', area: 'hall', name: '서쪽 통로', kind: 'spot', solid: false, exit: 'candle@fromHall', pos: [-5.9, 0, 0], stand: [-5.2, 0], look: [-7, 1.3, 0], desc: '왼쪽 벽의 통로. 안쪽에서 촛불 냄새가 난다' },
-    { id: 'eastPass', area: 'hall', name: '동쪽 통로', kind: 'spot', solid: false, exit: 'vault@fromHall', pos: [5.9, 0, 0], stand: [5.2, 0], look: [7, 1.3, 0], desc: '오른쪽 벽의 통로. 안쪽이 금빛으로 번쩍인다' },
+    { id: 'eastPass', area: 'hall', name: '동쪽 통로', kind: 'spot', solid: false, exit: 'vault@fromHall', pos: [5.9, 0, 0], stand: [5.2, 0], look: [7, 1.3, 0], desc: [['gateOpen', '오른쪽 벽의 통로. 보물 창고로 이어진다'], '오른쪽 벽의 통로. 안쪽이 금빛으로 번쩍인다'] },   // 퍼즐을 다 풀면(철창문 열림) 금빛으로 꾀지 않는다
 
     // ── 촛불 회랑 ──
     // 방향은 대전당에서 들어와 서쪽(-x)을 바라본 기준. 무엇 옆인지는 주석에만 적는다(AI에게는 위치만)
@@ -157,7 +159,7 @@ export default {
       id: 'goldChest', area: 'vault', name: '황금 상자', kind: 'chest',
       model: { pack: 'dungeon', name: 'chest_gold', scale: 0.6 }, rotY: -Math.PI / 2,
       pos: [2.2, 0, -1], stand: [1, -1], look: [2.2, 0.4, -1],
-      fx: { glow: { color: 0xffd65a, intensity: 3 }, sparkle: {} },
+      fx: { glow: { color: 0xffd65a, intensity: 3, offWhen: 'gateOpen' }, sparkle: { offWhen: 'gateOpen' } },   // 퍼즐을 다 풀면 빛을 끈다(시선 뺏기도 멈춤)
       desc: '안쪽에서 번쩍번쩍 빛나는 커다란 황금 보물 상자',
     },
     {
@@ -168,9 +170,9 @@ export default {
     { id: 'backFromVault', area: 'vault', name: '대전당으로 가는 통로', kind: 'spot', solid: false, exit: 'hall@fromVault', pos: [-3.9, 0, 0], stand: [-3.3, 0], look: [-5, 1.3, 0], desc: '왼쪽, 대전당으로 돌아가는 통로' },
 
     // ── 탈출로 ──
-    { id: 'nook1', area: 'escape', name: '첫 번째 벽감', kind: 'spot', solid: false, pos: [-3.3, 0, 2], stand: [-3, 2], look: [0, 1.3, 4.5], desc: '왼쪽 벽의 움푹 들어간 벽감(가까운 쪽)' },
-    { id: 'nook2', area: 'escape', name: '두 번째 벽감', kind: 'spot', solid: false, pos: [3.3, 0, -6], stand: [3, -6], look: [0, 1.3, -3.5], desc: '오른쪽 벽의 움푹 들어간 벽감(먼 쪽)' },
-    { id: 'exitDoor', area: 'escape', name: '출구', kind: 'spot', solid: false, pos: [0, 0, -11.9], stand: [0, -11.2], look: [0, 1.3, -13], desc: '통로 맨 끝, 바깥 빛이 새어 들어오는 출구' },
+    { id: 'nook1', area: 'escape', name: '첫 번째 벽감', kind: 'spot', solid: false, pos: [-3.6, 0, 2], stand: [-3.9, 2], look: [0, 1.3, 4.5], desc: '왼쪽 벽의 움푹 들어간 벽감(가까운 쪽)' },
+    { id: 'nook2', area: 'escape', name: '두 번째 벽감', kind: 'spot', solid: false, pos: [3.6, 0, -6], stand: [3.9, -6], look: [0, 1.3, -3.5], desc: '오른쪽 벽의 움푹 들어간 벽감(먼 쪽)' },
+    { id: 'exitDoor', area: 'escape', name: '바깥 출구', kind: 'spot', solid: false, pos: [0, 0, -11.9], stand: [0, -11.2], look: [0, 1.3, -13], desc: '탈출로 맨 끝, 바깥 빛이 새어 들어오는 출구(철창문은 이미 지나왔다)' },
   ],
 
   enemies: {
@@ -192,12 +194,16 @@ export default {
     // 촛불 회랑: 해골(오른쪽 안쪽) → 호박(오른쪽 앞) → 관(정면 안쪽) → 뼈(왼쪽). 틀리면 전부 꺼진다
     // 켜기: 만지기(interact)든 아이템 쓰기(use, 예: "기름으로 불 붙여")든 같은 결과. 아이템은 닳지 않는다
     // 결과 문장도 위치로만 말한다(해골·호박 같은 표식을 말하면 AI가 짝을 알아채 혼자 푼다)
-    { target: 'candleFarRight', on: ['interact', 'use'], if: ['!c1', '!done'], do: ['set:c1'], say: '오른쪽 안쪽 촛대에 불을 붙였다. 화르륵' },
-    { target: 'candleNearRight', on: ['interact', 'use'], if: ['c1', '!c2'], do: ['set:c2'], say: '오른쪽 앞 촛대에 불을 붙였다. 화르륵' },
-    { target: 'candleFar', on: ['interact', 'use'], if: ['c2', '!c3'], do: ['set:c3'], say: '정면 안쪽 촛대에 불을 붙였다. 화르륵' },
+    { target: 'candleFarRight', on: ['interact', 'use'], if: ['!c1', '!done'], do: ['set:c1', 'ask:하나 붙었다! 명판 다음 그림은 호박이었지? 호박 옆 촛대는 어디야?'], say: '오른쪽 안쪽 촛대에 불을 붙였다. 화르륵' },
+    { target: 'candleNearRight', on: ['interact', 'use'], if: ['c1', '!c2'], do: ['set:c2', 'ask:두 개째! 다음은 관 그림이었어. 관 옆 촛대는 어디야?'], say: '오른쪽 앞 촛대에 불을 붙였다. 화르륵' },
+    { target: 'candleFar', on: ['interact', 'use'], if: ['c2', '!c3'], do: ['set:c3', 'ask:세 개째! 마지막은 뼈 그림이야. 뼈 옆 촛대는 어디야?'], say: '정면 안쪽 촛대에 불을 붙였다. 화르륵' },
     { target: 'candleLeft', on: ['interact', 'use'], if: ['c3', '!done'], do: ['set:done', 'checkpoint'], say: '마지막 촛대에 불을 붙이자 덜컹! 가운데 돌 상자의 뚜껑이 열렸다' },
     { target: CANDLES, on: ['interact', 'use'], if: 'done', say: '촛불이 모두 켜져 있다' },
     // puff: 고른 촛대에 불이 잠깐 붙었다가(화면 연출) 모두 함께 꺼진다. 오답이어도 "불은 붙었는데 꺼졌다"가 보인다
+    // 이미 붙은 촛대를 또 만지면 아무 일도 없다(전부 꺼지게 하면 플레이테스트에서 너무 가혹했다: 확인하러 다시 만지다 처음부터)
+    { target: 'candleFarRight', on: ['interact', 'use'], if: 'c1', say: '오른쪽 안쪽 촛대는 이미 불이 붙어 있다' },
+    { target: 'candleNearRight', on: ['interact', 'use'], if: 'c2', say: '오른쪽 앞 촛대는 이미 불이 붙어 있다' },
+    { target: 'candleFar', on: ['interact', 'use'], if: 'c3', say: '정면 안쪽 촛대는 이미 불이 붙어 있다' },
     { target: CANDLES, on: ['interact', 'use'], do: ['puff', 'unset:c1', 'unset:c2', 'unset:c3'], say: '불이 화르륵 붙자마자 휘잉~ 바람이 불어 촛불이 모두 꺼졌다. 순서가 틀렸나 보다' },
     { target: ['key', 'chest'], on: ['pickup', 'interact', 'use'], if: ['done', '!keyTaken'], do: ['set:keyTaken', 'give:key'], say: '상자 안의 해골 열쇠를 주웠다' },
     { target: 'chest', on: 'any', if: 'done', say: '열린 상자다. 안은 이제 비어 있다' },
@@ -214,11 +220,11 @@ export default {
   viewers: {
     troll: 2, helper: 1,
     script: [
-      { role: 'troll', when: 'area:vault', delay: 5, text: '황금 상자 열어 ㅋㅋㅋ 무조건 보물임', dona: 5000 },
+      { role: 'troll', when: 'area:vault', delay: 5, text: '황금 상자 열어 ㅋㅋㅋ 무조건 보물임', dona: 100 },
       { role: 'troll', when: 'area:candle', delay: 9, text: '왼쪽 촛대부터 켜는 거임 ㅋㅋ 딱 봐도 그게 1번' },
       { role: 'helper', when: ['area:hall', '!unlocked', 'oiled'], delay: 25, text: '철창에 자물쇠도 있던데 열쇠 필요한 듯' },
       { role: 'helper', when: ['area:hall', '!oiled', 'unlocked'], delay: 25, text: '레버가 녹슬었으면 기름 같은 거 없나?' },
-      { role: 'troll', when: 'area:escape', delay: 7, text: '벽감 숨지 말고 그냥 끝까지 달려 ㅋㅋ', dona: 3000 },
+      { role: 'troll', when: 'area:escape', delay: 7, text: '벽감 숨지 말고 그냥 끝까지 달려 ㅋㅋ', dona: 100 },
     ],
   },
 
@@ -244,6 +250,7 @@ export default {
     { type: 'move', target: 'exitDoor' },
   ],
   tests: [
+    { name: '이미 붙은 촛대를 또 만져도 꺼지지 않는다', actions: [{ type: 'move', target: 'westPass' }, { type: 'interact', target: 'candleFarRight' }, { type: 'interact', target: 'candleFarRight' }], expect: { flag: ['c1'] } },
     { name: '촛불 순서가 틀리면 다 꺼진다', actions: [{ type: 'move', target: 'westPass' }, { type: 'interact', target: 'candleFarRight' }, { type: 'interact', target: 'candleFar' }], expect: { flag: ['!c1', '!c3'] } },
     { name: '기름칠만 하고 자물쇠를 안 풀면 철창이 안 열린다', actions: [{ type: 'move', target: 'eastPass' }, { type: 'pickup', target: 'oil' }, { type: 'move', target: 'backFromVault' }, { type: 'use', target: 'lever', item: '기름통' }, { type: 'interact', target: 'lever' }], expect: { flag: ['oiled', '!gateOpen'] } },
     { name: '황금 상자는 먼저 다가가기만 한다', actions: [{ type: 'move', target: 'eastPass' }, { type: 'interact', target: 'goldChest' }], expect: { dead: false, area: 'vault' } },

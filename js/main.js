@@ -23,8 +23,9 @@ function applyTurn(out, msgs) {
   S.history = S.history.slice(-8);
   // 플레이어의 채팅과 후원은 따로 더 오래 기억한다(다른 시청자 잡담에 밀려 "나무 길은 왼쪽" 같은 답을 잊지 않게).
   // 다른 시청자 후원은 넣지 않는다: 지난 방해꾼 후원을 "아직 따라야 할 지시"로 여겨 황금 상자로 되돌아갔다(스테이지 4)
-  const keep = msgs.filter(m => m.role === 'me').map(m => `${m.nick}(${m.kind === 'dona' ? '후원' : '채팅'}): ${m.text}`);
-  S.heard = [...(S.heard || []), ...keep].slice(-4);
+  // 2.5분이 지난 말은 잊는다: 이미 끝난 지시("오른쪽 안쪽 촛대부터")가 남아 계속 되돌아갔다(스테이지 4)
+  const now = Date.now(), keep = msgs.filter(m => m.role === 'me').map(m => ({ text: `${m.nick}(${m.kind === 'dona' ? '후원' : '채팅'}): ${m.text}`, at: now }));
+  S.heard = [...(S.heard || []).filter(h => now - h.at < 150000), ...keep].slice(-4);
   (Array.isArray(out.viewers) ? out.viewers : []).slice(0, 2)
     .forEach((v, i) => setTimeout(() => viewerLine(String(v).slice(0, 40)), 700 + i * 900));
 }
@@ -91,7 +92,7 @@ async function turn() {
 // AI에게 전달할 때 쓰는 플레이어 닉네임. 화면에는 '나'로 보이지만, 프롬프트에서 '나'는 한별 자신과 헷갈리므로 따로 둔다.
 // AI는 이 사람이 플레이어인지 모른다(다른 시청자와 똑같이 대한다).
 const PLAYER_NICK = '별똥별';
-let mode = 'chat', wallet = 1000;
+let mode = 'chat', wallet = 500;   // 처음 가진 후원 금액(스테이지 2·3 클리어 보상으로 늘어난다)
 function setMode(m) {
   mode = m;
   $('modeChat').classList.toggle('on', m === 'chat'); $('modeDona').classList.toggle('on', m === 'dona');

@@ -1,6 +1,6 @@
 # 검증 결과: 숲속 비밀 공터
 
-2026-11-22 · node tools/validate.mjs stage2
+2026-11-23 · node tools/validate.mjs stage2
 
 - 정답 경로 11수로 클리어 ✔
 - 테스트 통과 ✔ 이미 눌린 버튼을 다시 눌러도 풀리지 않는다
