@@ -6,6 +6,7 @@ import * as core from './core.js';
 import * as view from './view3d.js';
 import * as viewers from './viewers.js';
 import { flag } from './env.js';
+import * as sfx from './sfx.js';
 import { STAGES, EXTRA } from './stages/index.js';
 
 let idx = 0, stage, S, playing = Promise.resolve(), busy = false;
@@ -88,19 +89,34 @@ export function perform(a) {
   if (set.length || unset.length) S.done = [...(S.done || []), { text: result, set, unset }].slice(-8);
   busy = true;
   const st = S, token = ++playToken;
-  playing = play(effects, st, token).catch(e => console.error(e)).finally(() => { if (st === S && token === playToken) { busy = false; before = null; tutorial.check(); } });
+  const changed = set.length + unset.length > 0;
+  playing = play(effects, st, token, changed).catch(e => console.error(e)).finally(() => { if (st === S && token === playToken) { busy = false; before = null; tutorial.check(); } });
   return result;
 }
 
-async function play(effects, st, token) {
+// 손 동작 소리: 물건 종류(kind)와 상태가 바뀌었는지로 고른다. 규칙에 sfx가 있으면 그 소리도 함께(아래 'sfx' 효과)
+function actSound(kind, o, changed, ruleSfx) {
+  if (kind === 'use') sfx.play('use');
+  if (kind === 'pickup') return;                          // 주우면 'gain'에서 소리가 난다
+  const k = o?.kind;
+  if (k === 'door') return sfx.play(changed ? 'door.open' : 'door.locked');
+  if (k === 'button') return sfx.play('button');
+  if (k === 'lever') return sfx.play('lever');
+  if (k === 'chest') return sfx.play(changed ? 'chest.open' : 'poke');
+  if (k === 'spot' || k === 'sign' || ruleSfx) return;
+  if (kind === 'interact') sfx.play('poke');
+}
+async function play(effects, st, token, changed = false) {
+  const ruleSfx = effects.some(e => e.type === 'sfx');
   const spec = id => core.objectById(stage, id);
   for (const e of effects) {
     if (st !== S || token !== playToken) return;               // 재생 중 스테이지가 바뀌었거나 바위에 맞아 끊겼다
     if (e.type === 'moveTo') { walking = true; await view.moveTo(spec(e.obj)); walking = false; }
-    else if (e.type === 'act') await view.act(e.kind, spec(e.obj));
+    else if (e.type === 'act') { actSound(e.kind, spec(e.obj), changed, ruleSfx); await view.act(e.kind, spec(e.obj)); }
+    else if (e.type === 'sfx') e.ids.forEach(id => { const [n, step] = id.split(':'); sfx.play(n, { step: +step || 0 }); });
     else if (e.type === 'explore') await view.explore();
-    else if (e.type === 'gain') { const it = stage.items[e.item]; syncInv(S.inv.lastIndexOf(it.name)); toastItem(it); tutorial.check('@gain'); }
-    else if (e.type === 'ask') { S.askedAt = Date.now(); say(e.text, 'normal', 6000); tutorial.check('@ask'); }
+    else if (e.type === 'gain') { sfx.play('pickup'); const it = stage.items[e.item]; syncInv(S.inv.lastIndexOf(it.name)); toastItem(it); tutorial.check('@gain'); }
+    else if (e.type === 'ask') { sfx.play('voice.ask'); S.askedAt = Date.now(); say(e.text, 'normal', 6000); tutorial.check('@ask'); }
     else if (e.type === 'lose') syncInv();
     else if (e.type === 'render') view.render(stage, S);
     else if (e.type === 'goto') {
@@ -108,9 +124,9 @@ async function play(effects, st, token) {
       await view.transition(() => { if (token === playToken) view.loadArea(stage, S, e.area, e.entry); });
       if (token === playToken) before = null;                 // 구역을 넘어간 뒤에는 되돌리지 않는다
     }
-    else if (e.type === 'enemy') await view.enemy(stage.enemies[e.enemy], spec(e.obj));
-    else if (e.type === 'puff') await view.puff(spec(e.obj));
-    else if (e.type === 'pop') await view.pop(spec(e.obj));
+    else if (e.type === 'enemy') { sfx.play('guard'); await view.enemy(stage.enemies[e.enemy], spec(e.obj)); }
+    else if (e.type === 'puff') { sfx.play('candle.puff'); await view.puff(spec(e.obj)); }
+    else if (e.type === 'pop') { sfx.play('pop'); await view.pop(spec(e.obj)); }
     else if (e.type === 'react') { const line = e.lines[Math.floor(Math.random() * e.lines.length)]; setTimeout(() => { if (st === S) { say(line, e.emo, 3000); S.history.push(`한별(나, 깜짝 반응): ${line}`); } }, 250); }   // 다음 연출(튀어나옴)과 거의 동시에. AI 기록에도 남긴다
     else if (e.type === 'die') await dieAndRespawn(e.reason);
     else if (e.type === 'clear') await onClear();
@@ -118,6 +134,7 @@ async function play(effects, st, token) {
 }
 
 async function dieAndRespawn(reason) {
+  sfx.play('death');
   setFace('sad'); view.setAutonomy(false);
   await view.fall();
   $('deadReason').textContent = reason;
@@ -135,6 +152,7 @@ let rewardHook = () => {};
 export const onReward = fn => { rewardHook = fn; };
 
 async function onClear() {
+  sfx.play('clear');
   view.render(stage, S); view.setAutonomy(false);
   if (stage.reward) rewardHook(stage.reward);
   const last = idx < 0 || idx >= STAGES.length - 1;
@@ -164,5 +182,5 @@ export function jumpArea(id) {
 export const stageIndex = () => idx;
 
 /* AI용 정보 */
-export const context = () => ({ ...core.promptContext(stage, S), hazard: view.hazardStatus() });
+export const context = () => ({ ...core.promptContext(stage, S, view.pose()), hazard: view.hazardStatus() });
 export const visibleObjects = () => core.objectsIn(stage, S);

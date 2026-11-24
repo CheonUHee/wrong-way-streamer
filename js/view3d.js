@@ -16,6 +16,7 @@ import { objectsIn, cond } from './core.js';
 import { isPaused } from './pause.js';
 import { dressArea } from './dress.js';
 import { hasFlag } from './env.js';
+import * as sfx from './sfx.js';
 
 const EYE = 1.45;          // 눈높이(m)
 const WALK_SPEED = 2.2;    // 걷는 속도(m/s)
@@ -359,6 +360,8 @@ const nextWander = t => t + WANDER_DELAY[0] + Math.random() * (WANDER_DELAY[1] -
 const catchy = o => { if (!o.fx) return false; const off = OBJ[o.id]?.fxOff || {}; return !!((o.fx.glow && !off.glow) || (o.fx.sparkle && !off.sparkle) || o.fx.anim); };
 const mixers = [];
 const lookQ = new THREE.Quaternion(), tmp = new THREE.PerspectiveCamera();   // 카메라 기준 lookAt(-z가 정면)
+// 발소리 바닥: 연습장(격자) = 나무, 숲 = 풀, 골짜기·폐허·지하 = 돌
+const surfaceOf = env => !env ? 'stone' : env.grid ? 'wood' : env.kind === 'outdoor' && env.border !== 'cliff' ? 'grass' : 'stone';
 function finishWalk() { if (walk) { const d = walk.done; walk = null; d(); } }
 function finishAct() { if (anim) { const d = anim.done; anim = null; d(); } }
 
@@ -373,6 +376,7 @@ export function loadArea(stage, s, areaId, entryId) {
   const area = stage.areas[areaId];
   slope = area.env.slope || 0; curArea = area;
   setHazard(area.hazard);
+  sfx.setRoll('rock', 0); sfx.setAmbience(area.ambience || null);   // 구역 환경음(무너지는 탈출로: 자갈 떨어지는 소리)
   setLighting(area.env);
   (area.env.kind === 'outdoor' ? buildOutdoor : buildRoom)(area.env);
   // 스테이지 파일의 decor: 소품 편집기가 숨기고 대신 편집용 복제본을 보여 줄 수 있게 표시해 둔다
@@ -443,22 +447,25 @@ export const hazardStatus = () => hz?.phase || null;
 function stepHazard(dt) {
   if (!hz) return;
   const H = hz.spec, roll = Math.abs(H.to - H.from) / (H.speed || 8), warn = H.warn ?? 2.5;
-  if (!autonomy || falling || hazardOff) { $('warn').classList.remove('show'); if (hz.mesh) hz.mesh.visible = false; hz.phase = 'calm'; return; }
+  const kind = H.model?.sphere ? 'rock' : 'barrel';
+  if (!autonomy || falling || hazardOff) { $('warn').classList.remove('show'); if (hz.mesh) hz.mesh.visible = false; hz.phase = 'calm'; sfx.setRoll(kind, 0); return; }
   hz.t += dt;
   if (hz.t >= H.period) { hz.t -= H.period; hz.hit = false; }
   const phase = hz.t < 0 ? 'calm' : hz.t < warn ? 'warn' : hz.t < warn + roll ? 'roll' : 'calm';
+  if (phase === 'warn' && hz.phase !== 'warn') sfx.warnRumble(kind);   // 경고: 멀리서 커지는 쿠르르릉
   hz.phase = phase;
   $('warn').textContent = H.warnText || '⚠ 쿠르르릉… 위에서 뭔가 굴러온다!';
   $('warn').classList.toggle('show', phase === 'warn' || phase === 'roll');
   if (phase === 'warn') shake = Math.max(shake, 0.06);
   if (!hz.mesh) return;
   hz.mesh.visible = phase === 'roll';
-  if (phase !== 'roll') return;
+  if (phase !== 'roll') { sfx.setRoll(kind, 0); return; }
   const p = (hz.t - warn) / roll, z = H.from + (H.to - H.from) * p, r = H.radius || 1;
   hz.mesh.position.set(H.x || 0, gy(z) + (H.lift ?? 0), z);
   // 구르는 방향: 앞(+z)으로 굴러올 때 윗면이 앞으로 넘어오도록 x축 기준 + 회전(카메라 쪽에서 보면 반시계)
   hz.mesh.rotation.x += ((H.speed || 8) * dt) / r * Math.sign(H.to - H.from);
   const c = camera.position;
+  sfx.setRoll(kind, Math.max(0, 1 - Math.hypot(z - c.z, (H.x || 0) - c.x) / 24));   // 가까울수록 크게
   if (!hz.hit && Math.abs(z - c.z) < r + 0.3 && Math.abs(c.x - (H.x || 0)) < (H.lane || 3) / 2) {
     hz.hit = true; shake = 0.6;
     $('hit').classList.add('on'); setTimeout(() => $('hit').classList.remove('on'), 450);
@@ -658,6 +665,13 @@ function stepFree(dt) {
   euler.set(pitch, yaw, 0, 'YXZ'); camera.quaternion.setFromEuler(euler);
   return EYE + gy(camera.position.z) + fly;
 }
+// 지금 방송 화면(카메라)의 위치와 바라보는 방향(바닥 평면, 길이 1). AI에게 "화면 기준 왼쪽·오른쪽"을 알려 줄 때 쓴다
+const _dir = new THREE.Vector3();
+export function pose() {
+  camera.getWorldDirection(_dir);
+  const l = Math.hypot(_dir.x, _dir.z) || 1;
+  return { x: camera.position.x, z: camera.position.z, fx: _dir.x / l, fz: _dir.z / l };
+}
 // 조준점(화면 한가운데)이 가리키는 곳: 좌표와 맞은 것(오브젝트면 id)
 const ray = new THREE.Raycaster(), center = new THREE.Vector2(0, 0);
 const shown = o => { for (; o; o = o.parent) if (!o.visible) return false; return true; };   // 부모까지 모두 보이는가
@@ -708,7 +722,9 @@ function step(maxDt) {
       if (!walk.path.length) finishWalk();
     }
   }
+  const bobStep = Math.floor(bob / Math.PI);
   bob += dt * (walking ? 9 : 0);
+  if (walking && Math.floor(bob / Math.PI) !== bobStep) sfx.play('step', { surface: surfaceOf(curArea?.env) });   // 발 디딜 때마다
   let eyeY = EYE + gy(camera.position.z) + (walking ? Math.abs(Math.sin(bob)) * 0.04 : 0);
 
   // 적: 카메라 쪽으로 달려온다
@@ -759,6 +775,10 @@ function step(maxDt) {
   if (freeCam && !walk && !falling && !foe) eyeY = stepFree(dt);   // 테스트 모드: 키보드·마우스로 직접 움직인다
   else { camera.quaternion.slerp(lookQ, 1 - Math.exp(-k * dt)); syncLook(); }
   camera.position.y = eyeY;
+  if (curArea?.quake && !freeCam) {   // 무너지는 구역: 계속 조금씩 흔들린다
+    const q = curArea.quake * (0.6 + 0.4 * Math.sin(simT * 1.7));
+    camera.position.y += (Math.random() - 0.5) * q * 0.3;   // 높이만(매 프레임 다시 맞춰지므로 시점이 밀려나지 않는다)
+  }
   if (shake > 0) {
     shake = Math.max(0, shake - dt);
     camera.position.x += (Math.random() - 0.5) * shake * 0.25; camera.position.y += (Math.random() - 0.5) * shake * 0.25;

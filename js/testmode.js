@@ -6,6 +6,7 @@
    - '보기'는 카메라만 그 앞으로 옮긴다. 나머지 버튼은 규칙을 직접 실행(다가가기·상호작용·줍기·아이템 쓰기)해 퍼즐을 확인한다. 결과는 채팅창에 나온다. */
 import { $, esc, addLine } from './ui.js';
 import { hasFlag } from './env.js';
+import * as sfx from './sfx.js';
 import { isTest, setTest } from './pause.js';
 import * as view from './view3d.js';
 import { state, current, perform, jumpArea, loadStage, stageIndex, visibleObjects, isBusy } from './stage.js';
@@ -31,6 +32,19 @@ const probeHud = Object.assign(document.createElement('div'), { className: 'hud 
 const cross = Object.assign(document.createElement('div'), { className: 'crosshair' });
 $('stage').append(probeHud, cross);
 
+// 소리 듣기: 모든 소리를 하나씩 눌러 들어 본다(docs/sfx.md). 굴러오는 소리·탈출로 환경음은 켜고 끄기
+const sounds = document.createElement('details');
+sounds.innerHTML = `<summary>🔊 소리 듣기</summary><div class="tsounds">${sfx.soundIds().map(id => `<button data-s="${id}">${id}</button>`).join('')}`
+  + `<button data-roll="rock">바위 굴러옴(3초)</button><button data-roll="barrel">통 굴러옴(3초)</button><button data-amb="collapse">탈출로 환경음 켜기/끄기</button>`
+  + `</div>`;
+panel.appendChild(sounds);
+let ambOn = false;
+sounds.addEventListener('click', e => {
+  const b = e.target.closest('button'); if (!b) return; sfx.unlock();
+  if (b.dataset.s) sfx.play(b.dataset.s, { surface: 'stone' });
+  if (b.dataset.roll) { const k = b.dataset.roll; sfx.warnRumble(k); let t = 0; const iv = setInterval(() => { t += 0.1; sfx.setRoll(k, t < 3 ? Math.sin(Math.PI * t / 3) : 0); if (t >= 3) clearInterval(iv); }, 100); }
+  if (b.dataset.amb) { ambOn = !ambOn; sfx.setAmbience(ambOn ? 'collapse' : null); }
+});
 const btn = Object.assign(document.createElement('button'), { className: 'pill-btn', id: 'testBtn', textContent: '🧪 테스트 모드' });
 $('guideBtn').before(btn);
 btn.onclick = () => toggle(!isTest());

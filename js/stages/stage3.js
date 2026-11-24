@@ -143,7 +143,7 @@ export default {
     { target: 'lever', on: 'move', say: '레버가 있는 오른쪽 틈새에 쏙 숨었다. 여기는 안전하다' },
     { target: 'chest', if: '!chestOpen', do: ['set:chestOpen'], say: '상자를 열어 봤지만 텅 비어 있다' },
     { target: 'chest', say: '빈 상자다' },
-    { target: 'lever', if: '!gateOpen', do: ['set:gateOpen', 'checkpoint'], say: '레버를 당기자 끼기긱… 정면의 철창문이 위로 올라갔다!' },
+    { target: 'lever', if: '!gateOpen', sfx: 'gate', do: ['set:gateOpen', 'checkpoint'], say: '레버를 당기자 끼기긱… 정면의 철창문이 위로 올라갔다!' },
     { target: 'lever', say: '레버는 이미 내려가 있다' },
     { target: 'gate', if: 'gateOpen', do: ['clear'], say: '열린 철창문 안으로 뛰어들었다. 그 너머 묘지의 납골당 계단이 땅 밑으로 이어진다. 골짜기 탈출! 스테이지 클리어!' },
     { target: 'gate', say: '철창문이 굳게 닫혀 있다. 근처에 여는 장치가 있을 것 같다' },

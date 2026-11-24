@@ -120,7 +120,7 @@ export default {
     { target: 'button', say: '버튼은 이미 눌려 있다' },
     { target: 'door1', if: 'door1Open', do: ['goto:room2@start'], say: '열린 문을 지나 연습장 2로 들어왔다' },
     { target: 'door1', say: '문이 잠겨 꿈쩍도 하지 않는다. 어딘가 여는 장치가 있을 것 같다' },
-    { target: 'duck', say: '오리가 삑! 소리를 내며 더 신나게 춤춘다. 그것뿐이다' },
+    { target: 'duck', sfx: 'duck', say: '오리가 삑! 소리를 내며 더 신나게 춤춘다. 그것뿐이다' },
 
     { target: ['key', 'table'], on: ['pickup', 'interact'], if: '!keyTaken', do: ['set:keyTaken', 'give:key'], say: '책상 위의 열쇠를 주웠다' },
     // 열쇠를 주운 뒤 책상을 다시 만졌을 때(전에는 '위에 뭔가 놓여 있다'가 계속 나와서 한별이 책상에 집착했다)

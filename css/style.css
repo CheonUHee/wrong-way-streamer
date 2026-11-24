@@ -166,6 +166,9 @@ button { font: inherit; color: inherit; cursor: pointer; }
 .info .meta .live { color: var(--live); font-weight: 800; }
 .info .meta .uptime { color: var(--accent); font-weight: 800; font-variant-numeric: tabular-nums; }
 .info .grow { flex: 1; min-width: 0; }
+/* 플레이 가이드 다시 보기: 처음부터 노란 외곽선으로 눈에 띄게 */
+.info .guide-replay { border-color: var(--accent); color: var(--accent); font-weight: 700; white-space: nowrap; }
+.info .guide-replay:hover { background: #ffe14a1f; }
 
 .proto { flex: none; background: var(--panel); border: 1px dashed var(--line); border-radius: 10px; padding: 8px 12px; display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .proto b { font-size: 12px; color: var(--dim); margin-right: 4px; }
@@ -313,3 +316,14 @@ body.testing .streamer, body.testing .bubble { opacity: .25; }
 .tut-chatart .tc-note small { font-weight: 500; opacity: .8; }
 .tut-chatart .dona-line { padding: 4px 8px; }
 .tut-chatart .dona-line .amt { font-size: 10.5px; }
+
+/* 🔊 소리 설정(js/sfx.js initPanel). 배포 화면에서도 보인다 */
+.sound-wrap { position: relative; margin-left: 6px; }
+.sound-panel { position: absolute; right: 0; top: calc(100% + 8px); z-index: 60; width: 220px; padding: 12px 14px; display: grid; gap: 8px;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 12px 30px #0008; font-size: 12px; }
+.sound-panel[hidden] { display: none; }
+.sound-panel label { display: grid; grid-template-columns: 74px 1fr; align-items: center; gap: 8px; color: var(--dim); }
+.sound-panel label.mute { grid-template-columns: auto 1fr; }
+.sound-panel input[type=range] { width: 100%; accent-color: var(--accent); }
+.tsounds { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 0; }
+.tsounds button { font-size: 11px; padding: 3px 7px; border-radius: 6px; background: var(--panel2); border: 1px solid var(--line); }

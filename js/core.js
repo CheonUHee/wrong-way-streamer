@@ -146,6 +146,7 @@ export function perform(stage, s, a) {
   }
 
   if (a.type !== 'move') effects.push({ type: 'act', kind: a.type, obj: o.id });
+  if (r.sfx) effects.push({ type: 'sfx', ids: [].concat(r.sfx) });   // 규칙에 붙인 소리(예: 'correct:1', 'gate')
   applyDo(stage, s, r.do, effects, o);
   effects.push({ type: 'render' });
   return { result: r.say || `${o.name}에 무언가 했다`, effects };
@@ -195,8 +196,21 @@ export function lessonOf(stage, d) {
   return stage.areas[d.area]?.hazard?.lesson || '굴러오는 소리가 날 때 길 한가운데에 있으면 맞는다. 소리가 나면 틈새에 숨고, 지나간 뒤에 움직인다';
 }
 
+/* ── 화면 기준 방향 ──
+   오브젝트 설명(desc)의 "왼쪽 앞" 같은 말은 구역에 처음 들어와 섰을 때 기준이다. 다른 입구로 돌아오거나 몸을 돌리면 달라진다
+   (스테이지 2: 덤불 길에서 공터로 돌아와 "지금 위치에서 왼쪽 길"이라고 하니, 처음 기준의 왼쪽=나무 길로 갔다).
+   그래서 AI를 부를 때마다 지금 화면(카메라)에서 본 방향을 오브젝트마다 붙인다. pose: { x, z, fx, fz }(view3d.pose) */
+export function relDir(pose, pos) {
+  const dx = pos[0] - pose.x, dz = pos[2] - pose.z, dist = Math.hypot(dx, dz);
+  if (dist < 1.6) return '바로 앞';
+  const ahead = dx * pose.fx + dz * pose.fz, right = dx * -pose.fz + dz * pose.fx;
+  const ang = Math.atan2(right, ahead) * 180 / Math.PI, side = ang > 0 ? '오른쪽' : '왼쪽', a = Math.abs(ang);
+  const dir = a < 25 ? '정면' : a < 65 ? `${side} 앞` : a < 115 ? side : a < 155 ? `${side} 뒤` : '뒤';
+  return `${dir} ${Math.round(dist)}m`;
+}
+
 /* ── AI에게 줄 상황 정보 ── */
-export function promptContext(stage, s) {
+export function promptContext(stage, s, pose = null) {
   const killed = new Set(s.deaths.map(d => d.objId).filter(Boolean));
   const alikeTag = o => { const k = !killed.has(o.id) && alikeKiller(stage, s, o); return k ? ` (⚠ 전에 쓰러지게 한 ${k}${josa(k, '과', '와')} 비슷하게 생겼다. 손대기 전에 시청자에게 물어본다)` : ''; };
   // 통로(exit)는 어디로 이어지는지와 그곳에 있는 물건을 붙인다: 곁방에서는 대전당의 철창문이 안 보여 어디로 가야 할지 몰랐다(스테이지 4)
@@ -206,7 +220,8 @@ export function promptContext(stage, s) {
     const area = o.exit.split('@')[0], names = [...new Set(objectsIn(stage, { ...s, area }).filter(v => !v.exit && !isTrap(stage, v)).map(v => v.name))].slice(0, 6);
     return ` → ${areaName(stage, area)}${names.length ? `(${names.join('·')}${josa(names.at(-1), '이', '가')} 있는 곳)` : ''}`;
   };
-  const objs = objectsIn(stage, s).map(o => `- ${o.id}: ${describe(s, o)}${leadsTo(o)}${s.seen.includes(o.id) ? '' : ' (아직 가까이서 안 봄)'}${killed.has(o.id) ? ' (⚠ 전에 이걸 건드렸다가 쓰러졌다)' : alikeTag(o)}`);
+  const where = o => pose && o.pos ? ` [지금 화면 기준: ${relDir(pose, o.pos)}]` : '';
+  const objs = objectsIn(stage, s).map(o => `- ${o.id}: ${describe(s, o)}${where(o)}${leadsTo(o)}${s.seen.includes(o.id) ? '' : ' (아직 가까이서 안 봄)'}${killed.has(o.id) ? ' (⚠ 전에 이걸 건드렸다가 쓰러졌다)' : alikeTag(o)}`);
   const at = s.at ? objectById(stage, s.at)?.name + ' 앞' : (s.near || '입구 근처');
   const n = s.noticed && objectsIn(stage, s).find(o => o.id === s.noticed);
   return {

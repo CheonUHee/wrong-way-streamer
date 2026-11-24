@@ -126,9 +126,9 @@ export default {
       poke: '석판에는 큰 나무 → 덤불 → 호박 그림이 있다. 그런데 어느 길이 나무 길이고 어느 길이 호박 길인지 모르겠다',
     },
     // 오솔길 입구(위치로만 부른다. 나무 길: 서쪽, 덤불 길: 동쪽, 호박밭: 남쪽)
-    { id: 'pathWest', area: 'glade', name: '서쪽 오솔길', kind: 'spot', solid: false, exit: 'west@fromHub', pos: [-6.6, 0, 0], stand: [-5.8, 0], look: [-8, 1.3, 0], desc: '왼쪽(서쪽) 울타리 사이로 난 오솔길 입구' },
-    { id: 'pathEast', area: 'glade', name: '동쪽 오솔길', kind: 'spot', solid: false, exit: 'east@fromHub', pos: [6.6, 0, 0], stand: [5.8, 0], look: [8, 1.3, 0], desc: '오른쪽(동쪽) 울타리 사이로 난 오솔길 입구' },
-    { id: 'pathSouth', area: 'glade', name: '남쪽 오솔길', kind: 'spot', solid: false, exit: 'south@fromHub', pos: [0, 0, 6.6], stand: [0, 5.8], look: [0, 1.3, 8], desc: '뒤쪽(남쪽) 울타리 사이로 난 오솔길 입구. 처음 서 있던 곳 바로 뒤' },
+    { id: 'pathWest', area: 'glade', name: '서쪽 오솔길', kind: 'spot', solid: false, exit: 'west@fromHub', pos: [-6.6, 0, 0], stand: [-5.8, 0], look: [-8, 1.3, 0], desc: '서쪽 울타리 사이로 난 오솔길 입구' },
+    { id: 'pathEast', area: 'glade', name: '동쪽 오솔길', kind: 'spot', solid: false, exit: 'east@fromHub', pos: [6.6, 0, 0], stand: [5.8, 0], look: [8, 1.3, 0], desc: '동쪽 울타리 사이로 난 오솔길 입구' },
+    { id: 'pathSouth', area: 'glade', name: '남쪽 오솔길', kind: 'spot', solid: false, exit: 'south@fromHub', pos: [0, 0, 6.6], stand: [0, 5.8], look: [0, 1.3, 8], desc: '남쪽 울타리 사이로 난 오솔길 입구. 공터에 처음 들어온 자리 근처' },
     {
       id: 'stoneGate', area: 'glade', name: '큰 바위', sinkWhen: 'gateOpen', sinkDepth: 4,
       model: { pack: 'forest', name: 'Rock_1_K_Color1', scale: 0.95 }, rotY: 0.3,
@@ -168,16 +168,16 @@ export default {
   ],
 
   rules: [
-    { target: 'tablet', if: '!tabletClean', do: ['set:tabletClean', 'ask:석판에 나무 → 덤불 → 호박 그림이 있어! 근데 어느 길이 나무 길이야? 채팅창, 알려 줘!'], say: '석판을 뒤덮은 이끼를 손으로 쓱쓱 닦아 냈다. 큰 나무 → 덤불 → 호박 그림이 화살표로 이어져 있다' },
+    { target: 'tablet', if: '!tabletClean', sfx: 'scrub', do: ['set:tabletClean', 'ask:석판에 나무 → 덤불 → 호박 그림이 있어! 근데 어느 길이 나무 길이야? 채팅창, 알려 줘!'], say: '석판을 뒤덮은 이끼를 손으로 쓱쓱 닦아 냈다. 큰 나무 → 덤불 → 호박 그림이 화살표로 이어져 있다' },
     // 결과 문장도 방향으로만 말한다(나무·덤불·호박을 말하면 AI가 짝을 알아채 혼자 푼다)
     { target: 'btnWest', if: ['!p1', '!gateOpen'], do: ['set:p1', 'ask:하나 눌렸어! 다음은 덤불 길인데… 덤불 길은 어디야?'], say: '서쪽 길 끝 버튼이 딸깍 눌려 들어갔다' },
     { target: 'btnEast', if: ['p1', '!p2'], do: ['set:p2', 'ask:두 개째 눌렸다! 마지막은 호박밭이야. 호박밭은 어디야?'], say: '동쪽 길 끝 버튼이 딸깍 눌려 들어갔다' },
-    { target: 'btnSouth', if: ['p2', '!gateOpen'], do: ['set:gateOpen'], say: '남쪽 길 끝 버튼을 누르자 멀리 공터 쪽에서 쿠웅…! 북쪽 길을 막던 큰 바위가 가라앉는 소리가 났다!' },
+    { target: 'btnSouth', if: ['p2', '!gateOpen'], sfx: 'rockgate', do: ['set:gateOpen'], say: '남쪽 길 끝 버튼을 누르자 멀리 공터 쪽에서 쿠웅…! 북쪽 길을 막던 큰 바위가 가라앉는 소리가 났다!' },
     { target: ['btnWest', 'btnEast', 'btnSouth'], if: 'gateOpen', say: '버튼은 이미 눌려 있다. 공터 북쪽 길은 열렸다' },
     // 이미 눌린 버튼을 또 누르면 아무 일도 없다(전부 풀리게 하면 Gemini 플레이테스트에서 너무 가혹했다: 확인하러 다시 누르다 처음부터)
     { target: 'btnWest', if: 'p1', say: '서쪽 길 끝 버튼은 이미 눌려 들어가 있다' },
     { target: 'btnEast', if: 'p2', say: '동쪽 길 끝 버튼은 이미 눌려 들어가 있다' },
-    { target: ['btnWest', 'btnEast', 'btnSouth'], do: ['unset:p1', 'unset:p2'], say: '버튼을 눌렀더니 덜컥! 숲 여기저기서 눌려 있던 버튼들이 튀어 오르는 소리가 났다. 순서가 틀렸나 보다' },
+    { target: ['btnWest', 'btnEast', 'btnSouth'], sfx: 'wrong', do: ['unset:p1', 'unset:p2'], say: '버튼을 눌렀더니 덜컥! 숲 여기저기서 눌려 있던 버튼들이 튀어 오르는 소리가 났다. 순서가 틀렸나 보다' },
     { target: 'stoneGate', if: 'gateOpen', do: ['clear'], say: '바위가 가라앉은 길을 지나 숲 밖으로 빠져나갔다. 저 앞에 바위 절벽 골짜기가 보인다. 스테이지 클리어!' },
     { target: 'stoneGate', say: '커다란 바위가 길을 꽉 막고 있다. 밀어도 꿈쩍하지 않는다' },
   ],

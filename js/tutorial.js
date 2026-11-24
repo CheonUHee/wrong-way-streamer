@@ -137,15 +137,38 @@ function close() {
   setPaused(false);
   $('input').focus();
 }
-function showNext() {
+function showNext(start = 0) {
   open = true; setPaused(true);
   $('tut').classList.add('show');
   fitBody();
-  render(queue.shift(), 0);
+  const cards = queue.shift();
+  render(cards, Math.min(start, cards.length - 1));
   setTimeout(() => $('tutNext').focus(), 50);
 }
-export function show(cards) { if (!cards?.length) return; queue.push(cards); if (!open) showNext(); }
+export function show(cards) {
+  if (!cards?.length) return;
+  remember(cards);
+  queue.push(cards); if (!open) showNext();
+}
 export const isOpen = () => open;
+
+/* ── 다시 보기(방송 정보 줄의 📖 플레이 가이드 버튼) ──
+   지금 스테이지까지 오는 동안 본 카드만 본 순서대로 다시 보여 준다(예: 스테이지 2에서 누르면 1·2에서 본 카드).
+   아직 못 본 카드는 보여 주지 않는다(스포일러 방지). 마지막으로 본 카드부터 열고 ◀ 이전으로 거슬러 본다 */
+const seen = new Map();                                  // 스테이지 번호 → 본 카드(본 순서, 같은 카드는 한 번)
+const stageNo = () => { const i = STAGES.indexOf(stage); return i < 0 ? 0 : i; };
+function remember(cards) {
+  const n = stageNo(), list = seen.get(n) || [];
+  for (const c of cards) if (!list.includes(c)) list.push(c);
+  seen.set(n, list);
+}
+export function replay() {
+  if (open) return;
+  const now = stageNo();
+  const cards = [...seen.keys()].sort((a, b) => a - b).filter(n => n <= now).flatMap(n => seen.get(n));
+  if (!cards.length) return;
+  queue.unshift(cards); showNext(cards.length - 1);
+}
 
 /* ── 스테이지 연결 ── */
 let stage, getState, shown = new Set();

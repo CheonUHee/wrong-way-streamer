@@ -3,6 +3,10 @@ import { $, esc, addLine, viewerLine, say, donate, setFace, drawBubble, chatNois
 import * as viewers from './viewers.js';
 import { isPaused, whenResumed, onResume, isTest, onTest } from './pause.js';
 import { flag, hasFlag } from './env.js';
+import * as sfx from './sfx.js';
+import * as tutorial from './tutorial.js';
+sfx.initPanel();
+$('guideReplay').onclick = () => tutorial.replay();   // 📖 플레이 가이드 다시 보기
 import './testmode.js';
 if (hasFlag('shot')) import('./guideshots.js');   // 개발 전용: 플레이 가이드 그림용 화면 캡처
 import { state, current, isBusy, canInterrupt, perform, startFromUrl, restartStage, hazardNow, onReward } from './stage.js';
@@ -101,6 +105,7 @@ function setMode(m) {
 }
 // 스테이지 클리어 보상(스테이지 2·3: +500⚡). 스테이지 1은 튜토리얼이라 보상 없음
 onReward(n => {
+  sfx.play('reward');
   wallet += n; $('wallet').textContent = wallet.toLocaleString();
   addLine(`⚡ 클리어 보상 +${n.toLocaleString()}⚡ (지갑 ${wallet.toLocaleString()}⚡)`, 'sys');
 });
@@ -116,6 +121,7 @@ function send() {
     pending.push(m); schedule(1500);   // 알림이 뜨는 시간만큼 뒤에 반응
     viewers.onPlayerMessage(m);
   } else {
+    sfx.play('chat.send');
     const m = { kind: 'chat', text: v, nick: PLAYER_NICK, role: 'me', el: addLine(`<span class="nick">나</span>${esc(v)}`, 'me') };
     pending.push(m); schedule(1000);
     viewers.onPlayerMessage(m);

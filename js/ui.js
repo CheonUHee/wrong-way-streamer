@@ -1,5 +1,6 @@
 /* 방송 UI: 스트리머 표정, 말풍선, 도네이션, 채팅, 인벤토리, 방송 시간 */
 export const $ = id => document.getElementById(id);
+import * as sfx from './sfx.js';
 const stage = $('stage'), bubble = $('bubble'), bubbleSvg = $('bubbleSvg'), streamer = $('streamer');
 
 /* ── 스트리머 표정 ── */
@@ -130,7 +131,11 @@ export function say(text, emo = 'normal', hold = 3500) {
   $('bubbleText').textContent = '';
   bubble.classList.add('show'); drawBubble();
   let i = 0;
-  typeTimer = setInterval(() => { $('bubbleText').textContent = text.slice(0, ++i); if (i >= text.length) clearInterval(typeTimer); }, 28);
+  typeTimer = setInterval(() => {
+    $('bubbleText').textContent = text.slice(0, ++i);
+    if (i % 3 === 1 && /[가-힣a-zA-Z0-9]/.test(text[i - 1] || '')) sfx.play('voice.blip', { emo });   // 한별 웅얼거림: 글자 몇 개마다 한 번
+    if (i >= text.length) clearInterval(typeTimer);
+  }, 28);
   addLine(`<span class="nick">한별</span>${esc(text)}`, 'streamer-line');
   bubbleTimer = setTimeout(() => { bubble.classList.remove('show'); setFace('normal'); }, hold + text.length * 28);
 }
@@ -141,6 +146,7 @@ export function donate(nick, amount, msg, mine) {
   clearTimeout(donaTimer);
   const d = $('dona');
   d.classList.toggle('me', !!mine);
+  sfx.play(mine ? 'dona.mine' : 'dona.troll');   // 다른 시청자 후원은 지금은 방해꾼뿐이다
   $('donaImg').textContent = mine ? '📢' : '⚡';
   $('donaHead').innerHTML = `<em>${esc(nick)}</em>님이 <em>${amount.toLocaleString()}⚡</em> 후원!`;
   $('donaMsg').textContent = msg;
@@ -174,6 +180,7 @@ export function markRead(el, read) {
   else { tag.className = 'readtag missed'; tag.textContent = '💨 놓침'; }
   el.appendChild(tag);
   el.classList.add(read ? 'read' : 'missed');
+  sfx.play(read ? 'chat.read' : 'chat.missed');
 }
 export const NICKS = [['감자튀김', '#ff9e6b'], ['눈팅러', '#9bd0ff'], ['새벽반', '#c59bff'], ['치킨먹고싶다', '#ffb86b'], ['ㅇㅇ', '#7fd6c8'], ['고양이집사', '#ffd36b']];
 const CHATS = ['ㅋㅋㅋㅋㅋ', '아니 거기 아닌데요...', '이게 방송이지', '오늘 안에 깨긴 하냐', '귀여우니까 봐준다', '또 딴 데 본다 ㅋㅋ', '집중 집중!!', 'ㄹㅇㅋㅋ', '답답해서 내가 한다'];

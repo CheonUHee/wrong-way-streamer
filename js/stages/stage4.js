@@ -92,6 +92,7 @@ export default {
     escape: {
       name: '무너지는 탈출로',
       wander: false,
+      ambience: 'collapse', quake: 0.05,              // 자갈이 드드드 떨어지는 소리, 지진처럼 카메라가 조금 흔들림
       env: crypt({ w: 7, d: 24, h: 3.6, openings: { north: [{ x: 0, w: 1.6, h: 2.6, glow: 0xfff3d0 }], west: [{ x: 2, w: 2.2, h: 2.6, glow: 0x2e2620 }], east: [{ x: -6, w: 2.2, h: 2.6, glow: 0x2e2620 }] } }),
       aiNote: '좁은 지하 통로에 커다란 통이 주기적으로 굴러 내려온다. 통로 가운데에 있다가 통이 지나가면 맞고 쓰러진다. 양쪽 벽의 움푹 들어간 벽감 안은 안전하다. 너는 무서워서 시청자가 출발 신호를 주면 한 칸씩 움직이는 편이다. 철창문은 이미 지나왔고, 통로 끝의 바깥 출구로 나가면 탈출이다.',
       hazard: { name: '굴러온 통', model: BARREL, from: -11.5, to: 8, x: 0, lane: 5.4,   // 맞는 폭: 벽감(|x| 3 이상)만 빼고 통로 전체
@@ -187,17 +188,17 @@ export default {
     { target: 'gate', say: '철창문이 굳게 닫혀 있다. 해골 모양 자물쇠가 달려 있다' },
     { target: 'lever', on: 'use', item: '기름통', if: '!oiled', do: ['set:oiled', 'take:기름통', 'checkpoint'], say: '녹슨 레버에 기름을 듬뿍 발랐다. 이제 움직일 것 같다' },
     { target: 'lever', if: 'gateOpen', say: '레버는 이미 내려가 있다' },
-    { target: 'lever', if: ['oiled', 'unlocked'], do: ['set:gateOpen', 'checkpoint'], say: '레버를 당기자 끼기기긱… 철창문이 천천히 위로 올라갔다!' },
+    { target: 'lever', if: ['oiled', 'unlocked'], sfx: 'gate', do: ['set:gateOpen', 'checkpoint'], say: '레버를 당기자 끼기기긱… 철창문이 천천히 위로 올라갔다!' },
     { target: 'lever', if: 'oiled', say: '레버가 반쯤 내려가다 덜컥 걸렸다. 철창의 해골 자물쇠가 아직 잠겨 있다' },
     { target: 'lever', say: '레버가 녹슬어서 꿈쩍도 하지 않는다' },
 
     // 촛불 회랑: 해골(오른쪽 안쪽) → 호박(오른쪽 앞) → 관(정면 안쪽) → 뼈(왼쪽). 틀리면 전부 꺼진다
     // 켜기: 만지기(interact)든 아이템 쓰기(use, 예: "기름으로 불 붙여")든 같은 결과. 아이템은 닳지 않는다
     // 결과 문장도 위치로만 말한다(해골·호박 같은 표식을 말하면 AI가 짝을 알아채 혼자 푼다)
-    { target: 'candleFarRight', on: ['interact', 'use'], if: ['!c1', '!done'], do: ['set:c1', 'ask:하나 붙었다! 명판 다음 그림은 호박이었지? 호박 옆 촛대는 어디야?'], say: '오른쪽 안쪽 촛대에 불을 붙였다. 화르륵' },
-    { target: 'candleNearRight', on: ['interact', 'use'], if: ['c1', '!c2'], do: ['set:c2', 'ask:두 개째! 다음은 관 그림이었어. 관 옆 촛대는 어디야?'], say: '오른쪽 앞 촛대에 불을 붙였다. 화르륵' },
-    { target: 'candleFar', on: ['interact', 'use'], if: ['c2', '!c3'], do: ['set:c3', 'ask:세 개째! 마지막은 뼈 그림이야. 뼈 옆 촛대는 어디야?'], say: '정면 안쪽 촛대에 불을 붙였다. 화르륵' },
-    { target: 'candleLeft', on: ['interact', 'use'], if: ['c3', '!done'], do: ['set:done', 'checkpoint'], say: '마지막 촛대에 불을 붙이자 덜컹! 가운데 돌 상자의 뚜껑이 열렸다' },
+    { target: 'candleFarRight', on: ['interact', 'use'], if: ['!c1', '!done'], sfx: 'candle.on', do: ['set:c1', 'ask:하나 붙었다! 명판 다음 그림은 호박이었지? 호박 옆 촛대는 어디야?'], say: '오른쪽 안쪽 촛대에 불을 붙였다. 화르륵' },
+    { target: 'candleNearRight', on: ['interact', 'use'], if: ['c1', '!c2'], sfx: 'candle.on', do: ['set:c2', 'ask:두 개째! 다음은 관 그림이었어. 관 옆 촛대는 어디야?'], say: '오른쪽 앞 촛대에 불을 붙였다. 화르륵' },
+    { target: 'candleFar', on: ['interact', 'use'], if: ['c2', '!c3'], sfx: 'candle.on', do: ['set:c3', 'ask:세 개째! 마지막은 뼈 그림이야. 뼈 옆 촛대는 어디야?'], say: '정면 안쪽 촛대에 불을 붙였다. 화르륵' },
+    { target: 'candleLeft', on: ['interact', 'use'], if: ['c3', '!done'], sfx: ['candle.on', 'chest.open'], do: ['set:done', 'checkpoint'], say: '마지막 촛대에 불을 붙이자 덜컹! 가운데 돌 상자의 뚜껑이 열렸다' },
     { target: CANDLES, on: ['interact', 'use'], if: 'done', say: '촛불이 모두 켜져 있다' },
     // puff: 고른 촛대에 불이 잠깐 붙었다가(화면 연출) 모두 함께 꺼진다. 오답이어도 "불은 붙었는데 꺼졌다"가 보인다
     // 이미 붙은 촛대를 또 만지면 아무 일도 없다(전부 꺼지게 하면 플레이테스트에서 너무 가혹했다: 확인하러 다시 만지다 처음부터)

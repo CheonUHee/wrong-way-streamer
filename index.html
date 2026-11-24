@@ -13,6 +13,16 @@
   <button class="pill-btn" id="guideBtn">영역 가이드</button>
   <span class="ai-chip" id="aiChip">AI 꺼짐 (더미 응답)</span>
   <button class="pill-btn" id="settingsBtn">⚙ 설정</button>
+  <div class="sound-wrap">
+    <button class="pill-btn" id="soundBtn" title="소리 설정">🔊</button>
+    <div class="sound-panel" id="soundPanel" hidden>
+      <b>소리</b>
+      <label>효과음 <input type="range" min="0" max="100" data-k="sfx"></label>
+      <label>환경음 <input type="range" min="0" max="100" data-k="amb"></label>
+      <label>한별 목소리 <input type="range" min="0" max="100" data-k="voice"></label>
+      <label class="mute"><input type="checkbox" data-k="mute"> 모두 끄기</label>
+    </div>
+  </div>
 </div>
 
 <div class="layout">
@@ -65,6 +75,7 @@
         <div class="title">[퍼즐] 오늘은 진짜 한 번에 깬다!! (훈수 환영)</div>
         <div class="meta"><span class="live">● LIVE</span> · 시청자 <span id="viewers">378</span>명 · <span class="uptime"><span id="timer">00:00:00</span> 방송 중</span> · <span id="stageLabel">Stage 1</span></div>
       </div>
+      <button class="pill-btn guide-replay" id="guideReplay" title="지금까지 본 플레이 가이드를 다시 봅니다">📖 플레이 가이드</button>
       <button class="pill-btn">♡ 팔로우</button>
     </div>
 
