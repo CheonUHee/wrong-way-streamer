@@ -14,3 +14,7 @@ export const isTest = () => test;
 export function setTest(on) { test = on; testFns.forEach(fn => fn(on)); }
 export const onTest = fn => testFns.push(fn);
 export const whenResumed = () => paused ? new Promise(ok => waiters.push(ok)) : Promise.resolve();
+// 인트로 화면(js/intro.js): 떠 있는 동안은 멈춤 + 튜토리얼 카드도 띄우지 않는다("게임 시작" 뒤에 첫 카드)
+let intro = false;
+export const isIntro = () => intro;
+export function setIntro(on) { intro = on; }

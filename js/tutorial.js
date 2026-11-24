@@ -6,7 +6,7 @@
    - '@이벤트': 그 일이 처음 일어났을 때. 조건(예: 'area:hall', ['doorOpen'])은 행동이 끝난 뒤 처음 맞았을 때
    - 같은 항목은 스테이지를 한 번 진행하는 동안 한 번만 나온다 */
 import { $, esc } from './ui.js';
-import { setPaused, isTest } from './pause.js';
+import { setPaused, isTest, isIntro } from './pause.js';
 import { all } from './core.js';
 import { STAGES } from './stages/index.js';
 
@@ -84,9 +84,8 @@ export const ART = {
   // 틈새 자리(113, 110)는 js/guideshots.js가 찍으면서 계산해 알려 준 값
   boulder: svg(defs + photo('valley') + arrow(170, 104, 170, 146, C.bad)
     + tag(160, 22, '⚠ 쿠르르릉… 바위가 굴러온다') + ring(113, 110, 20, C.ok) + tag(92, 146, '틈새 = 안전')),
-  // 순서 퍼즐: 단서의 순서대로, 길마다 있는 버튼 누르기
+  // 순서 퍼즐: 길마다 있는 버튼(석판 그림은 넣지 않는다: 단서는 플레이어가 직접 찾게)
   order: svg(defs + photo('glade')
-    + `<rect x="6" y="6" width="120" height="40" rx="6" fill="#d9b98a" stroke="#7d7a70" stroke-width="2"/><text x="66" y="20" font-size="9" fill="#2a2a2a" text-anchor="middle" font-weight="700">석판 그림</text><text x="66" y="39" font-size="14" text-anchor="middle">🌳 ➜ 🌿 ➜ 🎃</text>`
     + ring(195, 134, 14) + tag(66, 70, '🌳 나무 길') + tag(254, 70, '🌿 덤불 길') + tag(122, 160, '🎃 호박밭')
     + tag(236, 22, '출구(큰 바위)')),
 };
@@ -175,7 +174,7 @@ let stage, getState, shown = new Set();
 export function reset(st, stateFn) { stage = st; getState = stateFn; shown = new Set(); queue = []; }
 // 이벤트('@start' 등) 또는 상태 변화 뒤 호출. 맞는 항목을 한 번씩 띄운다
 export function check(event) {
-  if (!stage?.tutorial || isTest()) return;
+  if (!stage?.tutorial || isTest() || isIntro()) return;   // 인트로 화면 동안은 띄우지 않는다(시작 뒤 js/main.js가 다시 부른다)
   const s = getState();
   stage.tutorial.forEach((t, i) => {
     if (shown.has(i)) return;

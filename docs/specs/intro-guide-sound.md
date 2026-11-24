@@ -5,7 +5,7 @@
 
 ---
 
-## 1. 인트로 화면
+## 1. 인트로 화면 (구현됨 2026-11-24)
 
 ### 1-1. 목적
 - 페이지를 열자마자 방송(AI·시청자·타이머)이 시작되지 않게 한다. 플레이어가 준비됐을 때 직접 시작한다.
@@ -51,6 +51,10 @@
 4. 스테이지를 깨고 새로고침했을 때 이어 하기를 둘지. 기본은 **두지 않음**
 
 ### 1-5. 개발 메모
+- 구현: `index.html` `#intro`, `js/intro.js`, 스타일 `.intro*`(css 맨 아래). 로고는 여백을 잘라 `assets/intro/logo.webp`(900px), 파비콘은 `assets/intro/favicon.png`(64px)·`icon-180.png`
+- 인트로 동안: 스테이지는 뒤에서 미리 불러 두고 멈춤(3D 시간·AI 턴·시청자·방송 시간). 인사말과 첫 플레이 가이드 카드는 "게임 시작" 뒤에 나온다
+- 넓은 화면은 왼쪽에 로고·버튼, 세로·좁은 화면(폭 760px 이하 또는 세로가 더 긴 화면)은 아래 가운데로 모은다
+- `?test`·`?shot`(개발용 캡처)도 인트로를 건너뛴다
 - 개발 모드(`localhost`, `?dev`)에서는 `?intro=off`로 건너뛸 수 있게 한다(테스트용).
 - 인트로는 배포 모드·개발 모드 모두 기본으로 나온다.
 
@@ -80,7 +84,7 @@ The left 40% of the image is a dim, uncluttered dark wall area (negative space f
 Clean anime illustration style, soft cel shading, high detail, 16:9 aspect ratio, 1920x1080.
 No text, no letters, no logos, no watermark, correct hands with five fingers.
 ```
-- 결과물: `assets/intro/bg.webp`(웹용 압축, 약 300KB 이하)로 넣는다. 나오기 전까지는 어두운 그라데이션 임시 배경.
+- 결과물: 원본 `assets/intro/bg.png`(1672×941) → 웹용 `assets/intro/bg.webp`(약 68KB)로 쓴다.
 - 모니터 속 채팅 글자는 생성기가 깨뜨리기 쉬워 "글자 없음"으로 두었다. 필요하면 나중에 실제 채팅 줄을 HTML로 얹을 수 있다.
 
 ---
@@ -129,5 +133,5 @@ No text, no letters, no logos, no watermark, correct hands with five fingers.
 ## 4. 작업 순서(제안)
 1. ✅ 소리 모듈(`js/sfx.js`)과 소리 설정 패널
 2. ✅ 효과음 제작(docs/sfx.md의 GOOD 항목) — 1차 청취 피드백 반영 중
-3. 인트로 화면 — 소리를 켜는 첫 클릭을 여기서 받는다(일러스트 전에는 임시 배경)
+3. ✅ 인트로 화면
 4. ✅ 플레이 가이드 다시 보기 버튼

@@ -265,8 +265,11 @@ dialog .btns .primary { background: var(--accent); color: var(--accent-ink); bor
 .tut-art svg { display: block; width: 100%; height: 100%; }
 .tut h3 { margin: 0 0 4px; font-size: 17px; }
 .tut p { margin: 0; color: #cfd3de; font-size: 14px; line-height: 1.55; word-break: keep-all; overflow-wrap: break-word; text-wrap: pretty; }   /* 낱말 단위로만 줄바꿈 */
-.tut-foot { display: flex; justify-content: space-between; align-items: center; margin-top: 14px; }
-.tut-foot span { font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+/* 칸 3개(이전 | 쪽수 | 다음·확인)로 나눠 쪽수가 늘 가운데에 있게: 버튼 글자 길이('다음 ▶'↔'확인')나 이전 버튼 유무로 흔들리지 않는다 */
+.tut-foot { display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; margin-top: 14px; }
+.tut-foot .prev { grid-column: 1; justify-self: start; }
+.tut-foot span { grid-column: 2; font-size: 12px; color: var(--dim); font-variant-numeric: tabular-nums; }
+.tut-foot #tutNext { grid-column: 3; justify-self: end; }
 .tut-foot button { background: var(--accent); color: var(--accent-ink); border: 0; border-radius: 8px; padding: 8px 18px; font-weight: 800; }
 .tut-foot button.prev { background: transparent; color: var(--dim); border: 1px solid var(--line, #3a3f4d); }
 .tut-foot button.prev:hover { color: var(--text, #e8eaf0); }
@@ -327,3 +330,30 @@ body.testing .streamer, body.testing .bubble { opacity: .25; }
 .sound-panel input[type=range] { width: 100%; accent-color: var(--accent); }
 .tsounds { display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 0; }
 .tsounds button { font-size: 11px; padding: 3px 7px; border-radius: 6px; background: var(--panel2); border: 1px solid var(--line); }
+
+/* ── 인트로 화면(docs/specs/intro-guide-sound.md 1장) ──
+   배경 일러스트(1인칭: 모니터 속 한별 방송)는 오른쪽에 모니터가 오도록 채우고, 비워 둔 왼쪽 어두운 자리에 로고와 "게임 시작" */
+.intro { position: fixed; inset: 0; z-index: 100; display: flex; align-items: center;
+  background: #10163a url(../assets/intro/bg.webp) right center / cover no-repeat; transition: opacity .45s ease, visibility .45s; }
+.intro::before { content: ''; position: absolute; inset: 0; pointer-events: none;   /* 로고 쪽을 조금 더 어둡게: 글자가 묻히지 않게 */
+  background: linear-gradient(90deg, #0b1030cc 0%, #0b103066 38%, transparent 60%); }
+.intro.hide { opacity: 0; visibility: hidden; pointer-events: none; }
+.intro-side { position: relative; width: min(31vw, 640px); margin-left: 4vw; display: grid; justify-items: center; gap: clamp(18px, 4vh, 40px); }
+.intro-logo { margin: 0; width: 100%; line-height: 0; animation: introPop .7s cubic-bezier(.2, 1.4, .4, 1) both; }
+.intro-logo img { width: 100%; height: auto; filter: drop-shadow(0 10px 24px #0008); }
+.intro-start { font: inherit; font-size: clamp(20px, 2.1vw, 30px); font-weight: 900; letter-spacing: .02em; color: #14161c; cursor: pointer;
+  padding: .55em 2.2em; border-radius: 999px; background: var(--accent); border: 4px solid #14161c; box-shadow: 0 6px 0 #14161c, 0 14px 28px #0007;
+  transition: transform .12s, box-shadow .12s, background .12s; animation: introRise .5s .35s ease-out both; }
+.intro-start:hover { background: #fff07a; transform: translateY(-2px); box-shadow: 0 8px 0 #14161c, 0 18px 30px #0008; }
+.intro-start:active { transform: translateY(5px); box-shadow: 0 1px 0 #14161c, 0 6px 14px #0007; }
+.intro-start:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
+@keyframes introPop { from { opacity: 0; transform: scale(.85) rotate(-3deg); } to { opacity: 1; transform: none; } }
+@keyframes introRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
+@media (prefers-reduced-motion: reduce) { .intro-logo, .intro-start { animation: none; } .intro { transition: none; } }
+/* 세로·좁은 화면: 모니터가 보이게 오른쪽을 기준으로 자르고, 로고·버튼은 아래 가운데로 */
+@media (max-aspect-ratio: 1/1), (max-width: 760px) {
+  .intro { align-items: flex-end; justify-content: center; background-position: 72% center; }
+  .intro::before { background: linear-gradient(0deg, #0b1030ee 0%, #0b103088 45%, transparent 75%); }
+  .intro-side { width: min(88vw, 520px); margin: 0 0 8vh; }
+}
+body.intro-on { overflow: hidden; }   /* 인트로 동안 뒤 화면이 스크롤되지 않게 */

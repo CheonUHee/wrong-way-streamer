@@ -5,8 +5,18 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>스트리머님, 거기 아닌데요! — UI 레이아웃 프로토타입</title>
 <link rel="stylesheet" href="css/style.css">
+<link rel="icon" type="image/png" href="assets/intro/favicon.png">
+<link rel="apple-touch-icon" href="assets/intro/icon-180.png">
+<link rel="preload" as="image" href="assets/intro/bg.webp">
 </head>
-<body>
+<body class="intro-on">
+<!-- 인트로 화면(docs/specs/intro-guide-sound.md 1장): "게임 시작"을 누를 때까지 방송(AI·시청자·시간)이 멈춰 있다. 그 클릭이 소리도 켠다 -->
+<div class="intro" id="intro" role="dialog" aria-modal="true" aria-label="스트리머님, 거기 아닌데요!">
+  <div class="intro-side">
+    <h1 class="intro-logo"><img src="assets/intro/logo.webp" alt="스트리머님, 거기 아닌데요! — Wrong Way, Streamer!"></h1>
+    <button class="intro-start" id="introStart">게임 시작</button>
+  </div>
+</div>
 <div class="topbar">
   <div class="logo">지지직<small>Zizizik</small></div>
   <div class="spacer"></div>

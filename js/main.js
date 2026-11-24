@@ -5,6 +5,7 @@ import { isPaused, whenResumed, onResume, isTest, onTest } from './pause.js';
 import { flag, hasFlag } from './env.js';
 import * as sfx from './sfx.js';
 import * as tutorial from './tutorial.js';
+import { started } from './intro.js';
 sfx.initPanel();
 $('guideReplay').onclick = () => tutorial.replay();   // 📖 플레이 가이드 다시 보기
 import './testmode.js';
@@ -152,6 +153,10 @@ setOnConfigChange(() => { fails = 0; schedule(500); });
 // 튜토리얼 창을 닫은 직후에는 플레이어가 상황을 볼 시간을 준다(바로 스스로 움직이지 않게)
 onResume(() => { if (!pending.length) schedule(AUTO_DELAY); });
 onTest(on => { pending = []; if (!on) schedule(AUTO_DELAY); });
-startFromUrl();
-setTimeout(() => say('하이 하이~! 오늘은 진짜 한 번에 깬다, 레츠 고!', 'happy'), 600);
-schedule(AUTO_DELAY);
+startFromUrl();                    // 인트로가 떠 있어도 스테이지는 뒤에서 미리 불러 둔다(멈춤 상태)
+// "게임 시작"을 누른 뒤(인트로를 건너뛰면 바로): 인사 → 첫 플레이 가이드 카드 → 스트리머 턴
+started.then(() => {
+  setTimeout(() => say('하이 하이~! 오늘은 진짜 한 번에 깬다, 레츠 고!', 'happy'), 600);
+  setTimeout(() => tutorial.check('@start'), 900);
+  schedule(AUTO_DELAY);
+});
