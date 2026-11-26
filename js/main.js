@@ -3,6 +3,7 @@ import { $, esc, addLine, viewerLine, say, donate, setFace, drawBubble, chatCoun
 import * as viewers from './viewers.js';
 import { isPaused, whenResumed, onResume, isTest, onTest } from './pause.js';
 import { flag, hasFlag } from './env.js';
+import { compass } from './core.js';
 import * as sfx from './sfx.js';
 import * as tutorial from './tutorial.js';
 import { started } from './intro.js';
@@ -10,7 +11,7 @@ sfx.initPanel();
 $('guideReplay').onclick = () => tutorial.replay();   // 📖 플레이 가이드 다시 보기
 import './testmode.js';
 if (hasFlag('shot')) import('./guideshots.js');   // 개발 전용: 플레이 가이드 그림용 화면 캡처
-import { state, current, isBusy, canInterrupt, perform, startFromUrl, restartStage, hazardNow, onReward } from './stage.js';
+import { state, current, isBusy, canInterrupt, perform, startFromUrl, restartStage, hazardNow, onReward, snapPose, holdView } from './stage.js';
 import { EMOS, SYSTEM, aiOn, buildPrompt, callGemini, mockBrain, setOnConfigChange } from './ai.js';
 
 function applyTurn(out, msgs) {
@@ -22,14 +23,18 @@ function applyTurn(out, msgs) {
   const result = perform({ type: String(a.type || 'idle'), target: a.target, item: a.item });
   const S = state();
   S.last = result; S.noticed = null;                          // 눈에 띈 것은 한 번 전달하면 잊는다
+  // 왼쪽·오른쪽이 들어간 말은 그때 화면의 방위를 붙여 둔다: "나무 길은 왼쪽 길이야"가 나중에 다른 쪽을 보고 들은 "왼쪽 길로 가"와 섞여
+  // 호박 길(지금 왼쪽) 대신 나무 길로 갔다(스테이지 2, Gemini로 재현: 방향을 바로 알려 줘도 4번 중 4번 나무 길)
+  const dirNote = m => { const c = /왼|오른|앞|뒤/.test(m.text) && current().areas[m.pose?.area]?.compass !== false && compass(m.pose);
+    return c ? ` (이 말을 들을 때 화면: 왼쪽=${c.left}, 오른쪽=${c.right}, 정면=${c.front})` : ''; };
+  msgs.forEach(m => S.history.push(`${m.nick}(${m.kind === 'dona' ? '후원' : '채팅'}): ${m.text}${dirNote(m)}`));
   if (wasAsking && S.asking === st0.asking) S.asking = null;   // 대답을 들었거나 기다리다 지쳤다(이번 행동이 새로 물은 건 남긴다)
-  msgs.forEach(m => S.history.push(`${m.nick}(${m.kind === 'dona' ? '후원' : '채팅'}): ${m.text}`));
   S.history.push(`한별(나): ${line}`, `결과: ${result}`);
   S.history = S.history.slice(-8);
   // 플레이어의 채팅과 후원은 따로 더 오래 기억한다(다른 시청자 잡담에 밀려 "나무 길은 왼쪽" 같은 답을 잊지 않게).
   // 다른 시청자 후원은 넣지 않는다: 지난 방해꾼 후원을 "아직 따라야 할 지시"로 여겨 황금 상자로 되돌아갔다(스테이지 4)
   // 2.5분이 지난 말은 잊는다: 이미 끝난 지시("오른쪽 안쪽 촛대부터")가 남아 계속 되돌아갔다(스테이지 4)
-  const now = Date.now(), keep = msgs.filter(m => m.role === 'me').map(m => ({ text: `${m.nick}(${m.kind === 'dona' ? '후원' : '채팅'}): ${m.text}`, at: now }));
+  const now = Date.now(), keep = msgs.filter(m => m.role === 'me').map(m => ({ text: `${m.nick}(${m.kind === 'dona' ? '후원' : '채팅'}): ${m.text}${dirNote(m)}`, at: now }));
   S.heard = [...(S.heard || []).filter(h => now - h.at < 150000), ...keep].slice(-4);
   (Array.isArray(out.viewers) ? out.viewers : []).slice(0, 2)
     .forEach((v, i) => setTimeout(() => viewerLine(String(v).slice(0, 40)), 700 + i * 900));
@@ -92,6 +97,7 @@ async function turn() {
     addLine('⚠ AI 응답 실패: ' + esc(String(e.message || e).slice(0, 140)), 'sys');
   }
   inFlight = false;
+  holdView(pending.some(m => m.role === 'me'));                 // 판단을 마쳤으니 다시 둘러봐도 된다(그사이 새 플레이어 채팅이 왔으면 계속 기다린다)
   if (fails >= 3) return addLine('연속 실패로 자동 진행을 멈췄습니다. 설정을 확인해 주세요.', 'sys');
   schedule(pending.length ? 800 : autoTurns >= AUTO_LIMIT ? IDLE_DELAY : AUTO_DELAY);
 }
@@ -121,15 +127,17 @@ function send() {
     if (wallet < 100) { $('hint').textContent = '⚡이 부족해요. 채팅으로 지시해 보세요.'; return; }
     wallet -= 100; $('wallet').textContent = wallet.toLocaleString();
     donate('나', 100, v, true);
-    const m = { kind: 'dona', text: v, nick: PLAYER_NICK, role: 'me', seq: chatCount() };
+    const m = { kind: 'dona', text: v, nick: PLAYER_NICK, role: 'me', seq: chatCount(), pose: snapPose() };
     pending.push(m); schedule(1500);   // 알림이 뜨는 시간만큼 뒤에 반응
     viewers.onPlayerMessage(m);
   } else {
     sfx.play('chat.send');
-    const m = { kind: 'chat', text: v, nick: PLAYER_NICK, role: 'me', el: addLine(`<span class="nick">나</span>${esc(v)}`, 'me'), seq: chatCount() };
+    const m = { kind: 'chat', text: v, nick: PLAYER_NICK, role: 'me', el: addLine(`<span class="nick">나</span>${esc(v)}`, 'me'), seq: chatCount(), pose: snapPose() };
     pending.push(m); schedule(1000);
     viewers.onPlayerMessage(m);
   }
+  // "왼쪽·오른쪽"은 보낸 순간의 화면 기준이다: 그 시선을 메시지에 찍어 두고(pose), 한별이 판단할 때까지 혼자 고개를 돌리거나 돌아다니지 않는다
+  holdView(true);
   $('input').value = '';
 }
 $('send').onclick = send;
@@ -149,14 +157,14 @@ $('otherDona').onclick = () => viewers.trollNow();   // 방해꾼 후원을 바�
 // 1.5초면 방해꾼 후원이 뜨자마자 한별이 움직여 막을 수 없었다(스테이지 3 Gemini 플레이테스트: 바위 길 한가운데 금화로 꾀어 쓰러짐)
 viewers.connect(m => { m.seq ??= chatCount(); pending.push(m);   // 자기 줄은 이미 올라간 뒤라 그 뒤 줄부터 센다
   scheduleBy(m.kind === 'dona' ? 4000 : AUTO_DELAY); });
-$('resetBtn').onclick = () => { pending = []; restartStage(); schedule(2000); };
+$('resetBtn').onclick = () => { pending = []; holdView(false); restartStage(); schedule(2000); };
 $('guideBtn').onclick = e => { document.body.classList.toggle('guide'); e.target.classList.toggle('on'); drawBubble(); };
 
 
 setOnConfigChange(() => { fails = 0; schedule(500); });
 // 튜토리얼 창을 닫은 직후에는 플레이어가 상황을 볼 시간을 준다(바로 스스로 움직이지 않게)
 onResume(() => { if (!pending.length) schedule(AUTO_DELAY); });
-onTest(on => { pending = []; if (!on) schedule(AUTO_DELAY); });
+onTest(on => { pending = []; holdView(false); if (!on) schedule(AUTO_DELAY); });
 startFromUrl();                    // 인트로가 떠 있어도 스테이지는 뒤에서 미리 불러 둔다(멈춤 상태)
 // "게임 시작"을 누른 뒤(인트로를 건너뛰면 바로): 인사 → 첫 플레이 가이드 카드 → 스트리머 턴
 started.then(() => {

@@ -16,8 +16,19 @@ const spot = (id, area, name, x, z, desc) => ({
   pos: [x, 0, z], stand: [Math.sign(x) * 3.7, z], look: [0, 1.3, z + 2.5], desc,
 });
 const ORD = ['첫', '두', '세', '네', '다섯', '여섯'];
+const iga = w => ((w.charCodeAt(w.length - 1) - 0xac00) % 28 ? '이' : '가');   // 받침 있으면 '이'
 // 아랫길 틈새: 오른쪽(동)·왼쪽(서) 번갈아, 11m 간격. 절벽 구멍(openings)의 x는 그 변을 따라간 z 좌표다
 const NICHES = [[3.4, 26], [-3.4, 15], [3.4, 4], [-3.4, -7], [3.4, -18], [-3.4, -28]];
+// 틈새마다 다른 표식(2026-11-27): "두 번째 틈새"처럼 순서를 세지 않아도 "횃불 있는 틈새로 가"처럼 보이는 것으로 가리킬 수 있게.
+// [이름(조사 판단용), 설명에 붙는 말, 모델, 크기]. 틈새 입구 안쪽(벽 바로 너머 x ±4.7, 한별이 서는 자리보다 조금 위쪽)에 두어 길에서도 보인다
+const MARKS = [
+  ['나무통', '나무통이 놓여 있다', ['dungeon', 'barrel_large'], 1.1],
+  ['해골 장대', '해골이 꽂힌 장대가 서 있다', ['halloween', 'post_skull'], 1.5],
+  ['호박등', '눈코입을 파낸 커다란 호박등이 놓여 있다', ['halloween', 'pumpkin_orange_jackolantern'], 2.2],
+  ['등불', '불 켜진 등불이 서 있다', ['halloween', 'lantern_standing'], 2.3],
+  ['묘비', '낡은 묘비가 서 있다', ['halloween', 'gravestone'], 1.4],
+  ['앙상한 나무', '잎이 다 떨어진 앙상한 나무가 서 있다', ['halloween', 'tree_dead_large'], 0.8],
+];
 
 export default {
   id: 'stage3',
@@ -43,8 +54,10 @@ export default {
       // 주기 13초: 바위가 지나간 직후 출발하면 한 칸(약 11m, 걸어서 6초)은 넉넉하고, 두 칸을 한 번에 가면 맞는다
       hazard: { model: BOULDER, from: -38, to: 29.5, x: 0, lane: 2 * R, radius: R, lift: R, speed: 10, period: 13, warn: 2.5, delay: 12,
         reason: '길 한가운데 있다가 굴러 내려온 커다란 바위에 부딪혀 쓰러졌다', lesson: LESSON },
-      entries: { start: { pos: [0, 33.5], look: [0, 2.5, 20] } },
+      entries: { start: { pos: [0, 33.5], look: [0, 2.5, 20], label: '출발 지점(골짜기 맨 아래, 아직 어느 틈새에도 들어가지 않은 길 위)' } },
       decor: [
+        // 틈새마다 다른 표식(MARKS)
+        ...NICHES.map(([x, z], i) => [MARKS[i][2][0], MARKS[i][2][1], [Math.sign(x) * 4.7, 0, z - 0.7], x > 0 ? -Math.PI / 2 : Math.PI / 2, MARKS[i][3]]),
         // 이어지는 여정: 등 뒤(남쪽)는 방금 지나온 숲 공터의 덤불 출구(스테이지 2)
         ['forest', 'Bush_1_C_Color1', [-2.6, 0, 37.2], 0.4, 2.8],
         ['forest', 'Bush_3_A_Color1', [2.7, 0, 37.4], 1.9, 2.8],
@@ -80,7 +93,7 @@ export default {
       scenery: '무너진 돌기둥과 부서진 벽이 흩어진 폐허. 철창문 너머로 앙상한 나무와 묘비, 호박등이 보인다.',
       hazard: { model: BOULDER, from: -10, to: 8, x: 0, lane: 2 * R, radius: R, lift: R, speed: 10, period: 12, warn: 2.2, delay: 7,
         reason: '폐허 오르막 한가운데서 굴러온 커다란 바위에 부딪혀 쓰러졌다', lesson: LESSON },
-      entries: { start: { pos: [0, 11.5], look: [0, 2.5, -6] } },
+      entries: { start: { pos: [0, 11.5], look: [0, 2.5, -6], label: '폐허 오르막 맨 아래(틈새 밖 길 위)' } },
       decor: [
         ['dungeon', 'wall', [-3.2, 0, -13], 0, 0.8],                              // 철창문 양옆 벽
         ['dungeon', 'wall', [3.2, 0, -13], 0, 0.8],
@@ -106,8 +119,9 @@ export default {
 
   objects: [
     // ── 아랫길 ──
-    ...NICHES.map(([x, z], i) => spot(`n${i + 1}`, 'lower', `${ORD[i]} 번째 틈새`, x, z,
-      `${x > 0 ? '오른쪽' : '왼쪽'} 절벽의 ${ORD[i]} 번째 바위 틈새${i === 0 ? '(가장 가까움)' : i === NICHES.length - 1 ? '(맨 위쪽, 오르막 끝 바로 앞)' : ''}`)),
+    // "(가장 가까움)"은 고정으로 적지 않는다: 지금 위치에서 가장 가까운 숨을 곳은 코드가 매 턴 붙인다(core.promptContext)
+    ...NICHES.map(([x, z], i) => spot(`n${i + 1}`, 'lower', `${MARKS[i][0]} 틈새`, x, z,
+      `${x > 0 ? '오른쪽' : '왼쪽'} 절벽의 ${ORD[i]} 번째 바위 틈새. 안에 ${MARKS[i][1]}${i === 0 ? '(아랫길 맨 아래쪽)' : i === NICHES.length - 1 ? '(맨 위쪽, 오르막 끝 바로 앞)' : ''}`)),
     // 금화는 뺐다(2026-11-23): 줍지도 않았는데 주웠다고 말하거나 바위 길로 꾀어 짜증만 났다
     {
       id: 'topLower', area: 'lower', name: '오르막 끝', kind: 'spot', solid: false, exit: 'upper@start',
@@ -138,7 +152,7 @@ export default {
   ],
 
   rules: [
-    ...NICHES.map((_, i) => ({ target: `n${i + 1}`, on: ['move', 'interact'], say: `${ORD[i]} 번째 바위 틈새에 쏙 숨었다. 여기는 안전하다` })),
+    ...NICHES.map((_, i) => ({ target: `n${i + 1}`, on: ['move', 'interact'], say: `${MARKS[i][0]}${iga(MARKS[i][0])} 있는 ${ORD[i]} 번째 바위 틈새에 쏙 숨었다. 여기는 안전하다` })),
     { target: 'u1', on: ['move', 'interact'], say: '폐허 왼쪽 바위 틈새에 쏙 숨었다. 여기는 안전하다' },
     { target: 'lever', on: 'move', say: '레버가 있는 오른쪽 틈새에 쏙 숨었다. 여기는 안전하다' },
     { target: 'chest', if: '!chestOpen', do: ['set:chestOpen'], say: '상자를 열어 봤지만 텅 비어 있다' },

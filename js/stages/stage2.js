@@ -85,6 +85,7 @@ export default {
     // ── 스포크: 오솔길 세 갈래 ──
     west: {
       name: '서쪽 오솔길',
+      compass: false,                                    // 오솔길 구역은 길 끝(버튼)을 -z에 두고 만들어서 구역 좌표의 북쪽이 실제 북쪽이 아니다
       env: lane('none', 'treeLane'),                                   // 나무 길: 울타리 대신 큰 나무가 줄지어 선다
       scenery: LANE_SCENERY,
       entries: { fromHub: { pos: [0, 4.8], look: [0, 1.2, -6] } },
@@ -95,6 +96,7 @@ export default {
     },
     east: {
       name: '동쪽 오솔길',
+      compass: false,                                    // 오솔길 구역은 길 끝(버튼)을 -z에 두고 만들어서 구역 좌표의 북쪽이 실제 북쪽이 아니다
       env: lane('bush', 'bushLane', { backdrop: false }),               // 덤불 길: 나무 없이 덤불만
       scenery: LANE_SCENERY,
       entries: { fromHub: { pos: [0, 4.8], look: [0, 1.2, -6] } },
@@ -105,6 +107,7 @@ export default {
     },
     south: {
       name: '남쪽 오솔길',
+      compass: false,                                    // 오솔길 구역은 길 끝(버튼)을 -z에 두고 만들어서 구역 좌표의 북쪽이 실제 북쪽이 아니다
       env: lane('none', 'pumpkinLane', { backdrop: false }),            // 호박밭: 밭에 호박이 가득, 바깥은 키 큰 풀
       scenery: LANE_SCENERY,
       entries: { fromHub: { pos: [0, 4.8], look: [0, 1.2, -6] } },

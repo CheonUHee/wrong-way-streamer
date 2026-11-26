@@ -20,7 +20,7 @@ view.onWander(() => { if (S && !busy) { S.at = null; S.near = '구역 안을 돌
 view.onNotice(id => { if (S) S.noticed = id; });
 // 주기 위험(굴러온 바위)에 맞음: 재생 중인 행동을 끊고 쓰러진다
 let playToken = 0, before = null;
-const snapshot = s => structuredClone({ area: s.area, entry: s.entry, flags: s.flags, inv: s.inv, at: s.at, checkpoint: s.checkpoint, visited: s.visited, asking: s.asking, cleared: s.cleared });
+const snapshot = s => structuredClone({ area: s.area, entry: s.entry, flags: s.flags, inv: s.inv, at: s.at, near: s.near, checkpoint: s.checkpoint, visited: s.visited, asking: s.asking, cleared: s.cleared });
 view.onHazard(reason => {
   // 출구로 걸어가는 중에는 규칙이 이미 cleared를 세워 두었다. 그 걸음 중에 맞으면 클리어를 없던 일로 하고 쓰러진다
   // (전에는 cleared면 맞아도 무시해서, 탈출로에서 출구로 달리면 통에 맞아도 살았다)
@@ -68,13 +68,15 @@ export function restartStage() {
 
 // AI가 고른 행동을 실행하고, 결과 문장을 바로 돌려준다(다음 AI 호출 때 전달). 화면 재생은 뒤에서 이어진다.
 // 걷는 중(아직 아무것도 건드리기 전)이면 시청자 말로 멈춰 세울 수 있다. "멈춰!", "숨어!"가 늦지 않게
-let walking = false;
-export const canInterrupt = () => busy && walking && before && !S.dead && !S.cleared;
+let walking = false, walkTo = null;
+// 다른 구역으로 넘어가는 걸음(오솔길에서 공터로 돌아가기 등)은 끊지 않는다: 끊으면 구역이 앞 구역으로 되돌아가,
+// 새 구역을 보고 고른 행동("왼쪽 길로 가" → 공터의 남쪽 길)이 "제자리에 서 있다"가 되었다. 도착한 뒤에 판단한다
+export const canInterrupt = () => busy && walking && before && before.area === S.area && !S.dead && !S.cleared;
 function stopWalk() {
   playToken++; view.interrupt();
   Object.assign(S, before); S.at = null; S.near = '가던 길을 멈추고 길 중간에 서 있음';
   S.history.push('결과 정정: 방금 하려던 행동은 가는 도중에 멈춰서 하지 못했다');
-  syncInv(); busy = false; walking = false; before = null;
+  syncInv(); busy = false; walking = false; walkTo = null; before = null;
 }
 
 export function perform(a) {
@@ -111,7 +113,7 @@ async function play(effects, st, token, changed = false) {
   const spec = id => core.objectById(stage, id);
   for (const e of effects) {
     if (st !== S || token !== playToken) return;               // 재생 중 스테이지가 바뀌었거나 바위에 맞아 끊겼다
-    if (e.type === 'moveTo') { walking = true; await view.moveTo(spec(e.obj)); walking = false; }
+    if (e.type === 'moveTo') { walking = true; walkTo = e.obj; await view.moveTo(spec(e.obj)); walking = false; walkTo = null; }
     else if (e.type === 'act') { actSound(e.kind, spec(e.obj), changed, ruleSfx); await view.act(e.kind, spec(e.obj)); }
     else if (e.type === 'sfx') e.ids.forEach(id => { const [n, step] = id.split(':'); sfx.play(n, { step: +step || 0 }); });
     else if (e.type === 'explore') await view.explore();
@@ -182,5 +184,30 @@ export function jumpArea(id) {
 export const stageIndex = () => idx;
 
 /* AI용 정보 */
-export const context = () => ({ ...core.promptContext(stage, S, view.pose()), hazard: view.hazardStatus() });
+// 화면 기준 방향의 기준이 되는 시선. 플레이어가 채팅을 보낸 순간의 것을 찍어 두었다가 그 턴에 쓴다(main.js)
+export const snapPose = () => ({ ...view.pose(), area: view.viewArea() });
+export const holdView = on => view.setHold(on);
+// 구역 입구에 막 들어섰을 때의 시선(입구 위치에서 look 쪽을 본다)
+function entryPose(areaId, entryId) {
+  const a = stage.areas[areaId], e = a?.entries?.[entryId] || Object.values(a?.entries || {})[0];
+  if (!e) return null;
+  const fx = e.look[0] - e.pos[0], fz = e.look[2] - e.pos[1], l = Math.hypot(fx, fz) || 1;
+  return { x: e.pos[0], z: e.pos[1], fx: fx / l, fz: fz / l, area: areaId };
+}
+export function context(p) {
+  // 찍어 둔 시선이 없거나 다른 구역의 것이면 지금 화면을 쓴다.
+  // 화면이 아직 앞 구역이면(구역을 옮기는 걸음·암전 중) 새 구역 입구에서 보게 될 시선으로 계산한다:
+  // 전에는 덤불 길의 카메라로 공터 물건의 방향을 재서 동쪽 길이 "왼쪽"으로 나왔다
+  if (!p || p.area !== S.area) p = view.viewArea() === S.area ? view.pose() : entryPose(S.area, S.entry);
+  const c = core.promptContext(stage, S, p);
+  // 걷는 중: 규칙 판정은 걷기 시작할 때 끝나 S.at이 이미 목적지다. 그대로 알리면 "벌써 틈새 안"이라고 여겨
+  // 길 한가운데서 "가장 가까운 틈새에 숨어!"를 듣고도 제자리에 섰다(스테이지 3). 아직 도착 전이라고 알린다
+  if (walking && before && walkTo) {
+    const name = id => core.objectById(stage, id)?.name;
+    const to = name(walkTo), from = before.at ? name(before.at) : core.spotLabel(stage, before);
+    const out = stage.areas[before.area]?.hazard ? ', 지금은 숨을 곳 밖 길 위라 바위에 맞을 수 있다' : '';
+    c.location = `${core.areaName(stage, before.area)} · ${from}에서 ${to}${core.josa(to, '으로', '로')} 걸어가는 중(아직 도착하지 않았다${out})`;
+  }
+  return { ...c, hazard: view.hazardStatus() };
+}
 export const visibleObjects = () => core.objectsIn(stage, S);

@@ -72,7 +72,8 @@ viewers는 구경만 하는 시청자의 리액션이다(웃음, 감탄, 놀림,
 
 const ENGLISH_RATE = 0.3;           // 영어 추임새를 허용하는 턴의 비율(0~1). 낮출수록 드물게 나온다
 export function buildPrompt(msgs) {
-  const c = context();
+  // 방향(왼쪽·오른쪽)은 플레이어가 마지막으로 말을 보낸 순간의 화면 기준으로 계산한다(main.js가 pose를 찍어 둔다)
+  const c = context(msgs.filter(m => m.role === 'me' && m.pose).at(-1)?.pose);
   const chat = msgs.length ? msgs.map(m => `- [${m.kind === 'dona' ? '후원' : '채팅'}] ${m.nick || '시청자'}: ${m.text}`).join('\n') : '없음';
   // 후원이 있으면 이번 턴에 따라야 할 후원을 코드에서 못 박는다(모델이 호기심을 핑계로 후원을 무시하는 일이 있어서)
   const lastDona = msgs.filter(m => m.kind === 'dona').at(-1);
@@ -82,6 +83,7 @@ export function buildPrompt(msgs) {
 [현재 위치] ${c.location}
 ${c.note ? `[이곳의 특징] ${c.note}
 ` : ''}${c.scenery ? `[주변 풍경] ${c.scenery}
+` : ''}${c.facing ? `[지금 화면 방향] ${c.facing}
 ` : ''}[보이는 오브젝트]
 ${c.objects}
 [인벤토리] ${c.inventory}${c.hazard === 'warn' || c.hazard === 'roll' ? `
@@ -93,7 +95,7 @@ ${c.deaths}
 ${c.history}
 ${c.done ? `[지금까지 해낸 일] (오래된 것부터. 이미 된 일은 다시 하러 가지 않는다. 시청자 말 중 이미 끝난 단계는 건너뛰고 다음 단계를 한다)
 ${c.done}
-` : ''}${c.heard ? `[기억해 둔 시청자 말] (오래된 것부터. 길 안내·단서의 짝처럼 지금도 쓸 만한 말. 서로 다르면 나중 말을 믿는다. 여러 단계 지시는 아직 안 끝난 단계를 이어서 한다)
+` : ''}${c.heard ? `[기억해 둔 시청자 말] (오래된 것부터. 길 안내·단서의 짝처럼 지금도 쓸 만한 말. 서로 다르면 나중 말을 믿는다. 여러 단계 지시는 아직 안 끝난 단계를 이어서 한다. 이 말들 속 왼쪽·오른쪽은 그때 화면 기준이다. 괄호 속 동서남북으로 옮겨 기억하고, 새로 들은 왼쪽·오른쪽은 [지금 화면 방향]과 [지금 화면 기준]으로 정한다)
 ${c.heard}
 ` : ''}${c.asking ? `[질문 중] 너는 방금 시청자들에게 "${c.asking}"라고 물었다. 시청자의 대답을 듣고 그대로 정한다(대답이 갈리면 위의 시청자 규칙대로 고른다).
 ` : ''}[방금 들어온 시청자 메시지] (온 순서대로)

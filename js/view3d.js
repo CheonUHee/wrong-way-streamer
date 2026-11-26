@@ -353,6 +353,10 @@ export const interrupt = () => { finishWalk(); finishAct(); };
 export const onNotice = fn => { hooks.notice = fn; };   // 시선을 뺏긴 오브젝트 id를 알려 준다
 export const onWander = fn => { hooks.wander = fn; };   // 오브젝트 앞을 떠나 돌아다니기 시작했다
 export const setAutonomy = on => { autonomy = on; };
+// 플레이어 채팅을 기다리는 동안에는 혼자 고개를 돌리거나 돌아다니지 않는다.
+// 플레이어가 "왼쪽 길"이라고 칠 때 본 화면과 한별이 판단할 때의 화면이 달라지지 않게(스테이지 2: 돌아온 뒤 배회하다 왼쪽이 나무 길로 바뀌었다)
+let hold = false;
+export const setHold = on => { hold = on; };
 const WANDER_DELAY = [7, 12];                          // 가만히 있은 지 이만큼(초) 지나면 돌아다닌다
 const NOTICE_RANGE = 3.2, NOTICE_COOLDOWN = 25;         // 이 거리 안의 눈길 끄는 물건에 고개를 돌린다. 같은 물건은 한동안 다시 안 본다
 const nextWander = t => t + WANDER_DELAY[0] + Math.random() * (WANDER_DELAY[1] - WANDER_DELAY[0]);
@@ -374,7 +378,7 @@ export function loadArea(stage, s, areaId, entryId) {
   mixers.length = 0;
   for (const k in OBJ) delete OBJ[k];
   const area = stage.areas[areaId];
-  slope = area.env.slope || 0; curArea = area;
+  slope = area.env.slope || 0; curArea = area; curAreaId = areaId;
   setHazard(area.hazard);
   sfx.setRoll('rock', 0); sfx.setAmbience(area.ambience || null);   // 구역 환경음(무너지는 탈출로: 자갈 떨어지는 소리)
   setLighting(area.env);
@@ -405,7 +409,8 @@ export function setDecorHidden(on) {
 }
 export const liftPos = p => lift(p);
 export const onArea = fn => { hooks.area = fn; };   // 구역을 새로 만들 때마다 알린다
-let curArea = null;
+let curArea = null, curAreaId = null;
+export const viewArea = () => curAreaId;   // 지금 화면에 그려진 구역(구역을 옮기는 걸음·암전 중에는 상태의 구역과 다르다)
 
 /* ── 주기 위험: 굴러오는 바위 ──
    area.hazard = { model, from, to, x, lane, radius, speed, period, warn, delay, reason, warnText }
@@ -740,7 +745,7 @@ function step(maxDt) {
 
   // 한눈팔기: 가만히 있으면 가끔 다른 물건 쪽을 힐끔 본다
   if (walking || anim || foe || falling) idleSince = t;
-  if (!freeCam && !glance && !walk && !anim && !foe && !falling && t - idleSince > nextGlance && objectsNow.length > 1) {
+  if (!freeCam && !hold && !glance && !walk && !anim && !foe && !falling && t - idleSince > nextGlance && objectsNow.length > 1) {
     const o = objectsNow[Math.floor(Math.random() * objectsNow.length)];
     glance = { at: v3(...lift(o.look)), until: t + 1.3 };
     nextGlance = 4 + Math.random() * 4; idleSince = t;
@@ -749,11 +754,11 @@ function step(maxDt) {
 
   // 자율 배회: AI가 시킨 일 없이 한동안 서 있으면 구역 안을 돌아다닌다
   // 굴러오는 위험이 있는 구역(골짜기·탈출로)에서는 혼자 돌아다니지 않는다: 가만히 서 있다가 길로 걸어 나가 맞는 일이 있었다(스테이지 3)
-  const free = autonomy && !freeCam && curArea?.wander !== false && !curArea?.hazard && !walk && !anim && !foe && !falling;
+  const free = autonomy && !hold && !freeCam && curArea?.wander !== false && !curArea?.hazard && !walk && !anim && !foe && !falling;
   if (!free) wanderAt = Math.max(wanderAt, nextWander(t));   // 시킨 일을 마친 뒤에도 한동안은 그 자리에 머문다
   else if (t > wanderAt) { explore(); wanderAt = nextWander(t); }
   // 시선 뺏기: 가까이 있는 눈길 끄는 물건(빛·반짝임·움직임)에 고개를 홱 돌린다. 걷는 중에도 일어난다
-  if (autonomy && !freeCam && !foe && !falling && !anim && t - lastNoticeCheck > 0.4) {
+  if (autonomy && !hold && !freeCam && !foe && !falling && !anim && t - lastNoticeCheck > 0.4) {
     lastNoticeCheck = t;
     const near = objectsNow.find(o => catchy(o) && o.id !== walk?.target && (t - (noticedAt[o.id] ?? -99)) > NOTICE_COOLDOWN
       && Math.hypot(o.pos[0] - camera.position.x, o.pos[2] - camera.position.z) < NOTICE_RANGE);

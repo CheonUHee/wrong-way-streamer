@@ -23,8 +23,14 @@ function saveCheckpoint(s) { s.checkpoint = { area: s.area, entry: s.entry, flag
 export function respawn(stage, s) {
   const c = s.checkpoint;
   Object.assign(s, { area: c.area, entry: c.entry, flags: { ...c.flags }, inv: [...c.inv], at: null, near: null, noticed: null, asking: null, dead: false });
-  s.last = `쓰러졌다가 ${areaName(stage, s.area)}에서 다시 일어났다`;
+  s.last = `쓰러졌다가 ${areaName(stage, s.area)}의 ${spotLabel(stage, s)}에서 다시 일어났다`;
+  // 최근 기록에는 쓰러지기 전에 숨었던 곳("네 번째 바위 틈새에 쏙 숨었다")이 남아 있어, 다시 일어난 뒤에도 거기 있다고 여겼다(스테이지 3).
+  // 위치가 바뀌었다는 것을 기록에 못 박는다
+  s.history.push(`결과: 쓰러져서 ${spotLabel(stage, s)}로 되돌아왔다. 쓰러지기 전에 있던 곳에는 이제 없다`);
 }
+
+// 오브젝트 앞이 아닐 때의 자리 이름: 걷다 멈춘 자리 > 입구의 label(예: 출발 지점) > 입구 근처
+export const spotLabel = (stage, s) => s.near || stage.areas[s.area]?.entries?.[s.entry]?.label || '입구 근처';
 
 /* ── 조건 ──
    'flag' / '!flag'          : 플래그가 켜져 있다 / 꺼져 있다
@@ -54,7 +60,7 @@ export function describe(s, o) {
   for (const d of o.desc) { if (typeof d === 'string') return d; if (all(s, d[0])) return d[1]; }
   return '';
 }
-const josa = (word, a, b) => {
+export const josa = (word, a, b) => {
   const c = word.charCodeAt(word.length - 1) - 0xac00, jong = c >= 0 && c < 11172 ? c % 28 : 0;
   if (a === '으로' && jong === 8) return b;          // 받침이 ㄹ이면 '로'(오솔길로, 출구로)
   return jong ? a : b;
@@ -209,6 +215,16 @@ export function relDir(pose, pos) {
   return `${dir} ${Math.round(dist)}m`;
 }
 
+// 화면이 향한 방위(북 = -z, 동 = +x). "왼쪽·오른쪽"을 동서남북으로 옮겨 적을 때 쓴다.
+// 기억해 둔 "나무 길은 왼쪽 길이야"를 나중에 다른 방향을 보고 들은 "왼쪽 길로 가"와 섞지 않게 하려고(스테이지 2)
+export function compass(pose) {
+  if (!pose) return null;
+  const names = ['북쪽', '동쪽', '남쪽', '서쪽'];               // 시계 방향
+  const i = ((Math.round(Math.atan2(pose.fx, -pose.fz) / (Math.PI / 2)) % 4) + 4) % 4;
+  return { front: names[i], right: names[(i + 1) % 4], back: names[(i + 2) % 4], left: names[(i + 3) % 4] };
+}
+export const compassText = pose => { const c = compass(pose); return c ? `정면=${c.front}, 왼쪽=${c.left}, 오른쪽=${c.right}, 뒤=${c.back}` : ''; };
+
 /* ── AI에게 줄 상황 정보 ── */
 export function promptContext(stage, s, pose = null) {
   const killed = new Set(s.deaths.map(d => d.objId).filter(Boolean));
@@ -221,11 +237,18 @@ export function promptContext(stage, s, pose = null) {
     return ` → ${areaName(stage, area)}${names.length ? `(${names.join('·')}${josa(names.at(-1), '이', '가')} 있는 곳)` : ''}`;
   };
   const where = o => pose && o.pos ? ` [지금 화면 기준: ${relDir(pose, o.pos)}]` : '';
-  const objs = objectsIn(stage, s).map(o => `- ${o.id}: ${describe(s, o)}${where(o)}${leadsTo(o)}${s.seen.includes(o.id) ? '' : ' (아직 가까이서 안 봄)'}${killed.has(o.id) ? ' (⚠ 전에 이걸 건드렸다가 쓰러졌다)' : alikeTag(o)}`);
-  const at = s.at ? objectById(stage, s.at)?.name + ' 앞' : (s.near || '입구 근처');
+  // 굴러오는 위험이 있는 구역: 지금 시선 위치에서 실제로 가장 가까운 숨을 곳(safe)을 표시한다.
+  // 전에는 첫 번째 틈새 설명에 "(가장 가까움)"을 고정으로 적어, 두 번째 틈새로 가는 길에서도 지나온 첫 번째가 가장 가깝다고 했다
+  const hide = stage.areas[s.area]?.hazard && pose ? objectsIn(stage, s).filter(o => o.safe && o.stand)
+    .reduce((b, o) => { const d = Math.hypot(o.stand[0] - pose.x, o.stand[1] - pose.z); return !b || d < b.d ? { o, d } : b; }, null) : null;
+  const near = o => hide?.o === o ? ' (지금 가장 가까운 숨을 곳)' : '';
+  const objs = objectsIn(stage, s).map(o => `- ${o.id}: ${describe(s, o)}${near(o)}${where(o)}${leadsTo(o)}${s.seen.includes(o.id) ? '' : ' (아직 가까이서 안 봄)'}${killed.has(o.id) ? ' (⚠ 전에 이걸 건드렸다가 쓰러졌다)' : alikeTag(o)}`);
+  const ato = s.at && objectById(stage, s.at);
+  const at = ato ? `${ato.name} ${ato.kind === 'spot' && ato.safe ? '안(숨어 있다)' : '앞'}` : spotLabel(stage, s);
   const n = s.noticed && objectsIn(stage, s).find(o => o.id === s.noticed);
   return {
     goal: stage.goal,
+    facing: stage.areas[s.area]?.compass === false ? '' : compassText(pose),   // compass: false = 구역 좌표가 실제 방위와 다른 곳(돌려 놓은 곁길)
     location: `${areaName(stage, s.area)} · ${at}`,
     note: [stage.aiNote, stage.areas[s.area]?.aiNote].filter(Boolean).join(' '),
     scenery: stage.areas[s.area]?.scenery || '',
