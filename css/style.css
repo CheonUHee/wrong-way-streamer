@@ -347,9 +347,15 @@ body.testing .streamer, body.testing .bubble { opacity: .25; }
 .intro-start:hover { background: #fff07a; transform: translateY(-2px); box-shadow: 0 8px 0 #14161c, 0 18px 30px #0008; }
 .intro-start:active { transform: translateY(5px); box-shadow: 0 1px 0 #14161c, 0 6px 14px #0007; }
 .intro-start:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
+/* 개발 문서 버튼: "게임 시작" 아래 보조 버튼. 새 탭으로 열어 인트로는 그대로 둔다 */
+.intro-doc { margin-top: calc(-1 * clamp(4px, 1.5vh, 16px)); font-size: clamp(14px, 1.15vw, 18px); font-weight: 800; color: #fff; text-decoration: none;
+  padding: .45em 1.4em; border-radius: 999px; border: 2px solid #ffffffb0; background: #0b103080; backdrop-filter: blur(4px);
+  transition: background .12s, border-color .12s, color .12s; animation: introRise .5s .5s ease-out both; }
+.intro-doc:hover { color: var(--accent); border-color: var(--accent); background: #0b1030cc; }
+.intro-doc:focus-visible { outline: 3px solid #fff; outline-offset: 4px; }
 @keyframes introPop { from { opacity: 0; transform: scale(.85) rotate(-3deg); } to { opacity: 1; transform: none; } }
 @keyframes introRise { from { opacity: 0; transform: translateY(14px); } to { opacity: 1; transform: none; } }
-@media (prefers-reduced-motion: reduce) { .intro-logo, .intro-start { animation: none; } .intro { transition: none; } }
+@media (prefers-reduced-motion: reduce) { .intro-logo, .intro-start, .intro-doc { animation: none; } .intro { transition: none; } }
 /* 세로·좁은 화면: 모니터가 보이게 오른쪽을 기준으로 자르고, 로고·버튼은 아래 가운데로 */
 @media (max-aspect-ratio: 1/1), (max-width: 760px) {
   .intro { align-items: flex-end; justify-content: center; background-position: 72% center; }
