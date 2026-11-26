@@ -1,5 +1,5 @@
 /* 진입점: 턴 진행(AI 호출 타이밍), 플레이어 입력, 프로토타입 컨트롤 */
-import { $, esc, addLine, viewerLine, say, donate, setFace, drawBubble, chatNoise, markRead } from './ui.js';
+import { $, esc, addLine, viewerLine, say, donate, setFace, drawBubble, chatCount, markRead } from './ui.js';
 import * as viewers from './viewers.js';
 import { isPaused, whenResumed, onResume, isTest, onTest } from './pause.js';
 import { flag, hasFlag } from './env.js';
@@ -39,7 +39,8 @@ function applyTurn(out, msgs) {
    비용 보호: 호출 간 최소 간격(MIN_GAP). 조용한 상태로 AUTO_LIMIT턴이 지나면 멈추지 않고
    IDLE_DELAY 간격으로 느려진다. 탭이 가려져 있으면 호출하지 않는다. */
 const MIN_GAP = 4000, AUTO_DELAY = 8000, AUTO_LIMIT = 6, IDLE_DELAY = 15000;
-const MIN_GAP_PLAYER = 1500;   // 플레이어의 채팅·후원에는 더 빨리 반응한다("숨어!" 같은 타이밍 훈수가 늦지 않게)
+const MISS_STEP = 0.15, MISS_MAX = 0.6;   // 채팅 놓침: 내 채팅 뒤로 쌓인 다른 시청자 줄 1줄마다 15%, 최대 60%
+const MIN_GAP_PLAYER = 1500;  // 플레이어의 채팅·후원에는 더 빨리 반응한다("숨어!" 같은 타이밍 훈수가 늦지 않게)
 let pending = [], inFlight = false, turnTimer, turnDue = 0, lastCall = 0, fails = 0, autoTurns = 0;
 // 주소 뒤에 ?auto=off 를 붙이면 스트리머가 스스로 행동하지 않는다(채팅·후원이 올 때만 반응. 테스트용)
 const AUTO_OFF = flag('auto') === 'off';
@@ -71,10 +72,12 @@ async function turn() {
   // 조용할 때 혼자 금화를 주우러 나갔다가 바위에 맞는 일이 잦았다(스테이지 3 Gemini 플레이테스트)
   if (!pending.length && hazardNow() && current().objects.find(o => o.id === state().at)?.safe) return schedule(1500);
   const raw = pending; pending = [];
-  // 채팅은 채팅창이 붐빌수록 놓친다(후원은 반드시 읽는다). 놓친 메시지는 스트리머에게 전달되지 않는다
-  // 최근 8초에 다른 시청자 줄이 2줄을 넘으면 1줄마다 7%씩 놓친다(최소 40%는 읽음)
-  const readChance = Math.max(0.4, 1 - Math.max(0, chatNoise() - 2) * 0.07);
-  const msgs = raw.filter(m => m.kind === 'dona' || Math.random() < readChance).slice(-5);
+  // 채팅은 뒤로 쌓인 줄에 밀려 올라갈수록 놓친다(후원은 판정 없이 읽는다). 놓친 메시지는 스트리머에게 전달되지 않는다.
+  // 기획 의도: 스트리머와 대화하며 채팅창을 같이 보면, 대화에 집중하는 사이 채팅이 밀려 올라가 놓친다.
+  // 그래서 붐빔 전체가 아니라 '이 메시지 뒤에 다른 시청자 줄이 몇 줄 올라왔나'로 메시지마다 따로 정한다.
+  // 뒤에 1줄마다 MISS_STEP씩 선형으로 늘고 MISS_MAX에서 멈춘다(최소 40%는 읽음)
+  const missChance = m => Math.min(MISS_MAX, MISS_STEP * Math.max(0, chatCount() - (m.seq ?? chatCount())));
+  const msgs = raw.filter(m => m.kind === 'dona' || Math.random() >= missChance(m)).slice(-5);
   raw.forEach(m => m.el && markRead(m.el, msgs.includes(m)));
   if (raw.length) { autoTurns = 0; if (msgs.length) setFace('think'); } else autoTurns++;
   inFlight = true; lastCall = Date.now();
@@ -118,12 +121,12 @@ function send() {
     if (wallet < 100) { $('hint').textContent = '⚡이 부족해요. 채팅으로 지시해 보세요.'; return; }
     wallet -= 100; $('wallet').textContent = wallet.toLocaleString();
     donate('나', 100, v, true);
-    const m = { kind: 'dona', text: v, nick: PLAYER_NICK, role: 'me' };
+    const m = { kind: 'dona', text: v, nick: PLAYER_NICK, role: 'me', seq: chatCount() };
     pending.push(m); schedule(1500);   // 알림이 뜨는 시간만큼 뒤에 반응
     viewers.onPlayerMessage(m);
   } else {
     sfx.play('chat.send');
-    const m = { kind: 'chat', text: v, nick: PLAYER_NICK, role: 'me', el: addLine(`<span class="nick">나</span>${esc(v)}`, 'me') };
+    const m = { kind: 'chat', text: v, nick: PLAYER_NICK, role: 'me', el: addLine(`<span class="nick">나</span>${esc(v)}`, 'me'), seq: chatCount() };
     pending.push(m); schedule(1000);
     viewers.onPlayerMessage(m);
   }
@@ -144,7 +147,8 @@ $('otherDona').onclick = () => viewers.trollNow();   // 방해꾼 후원을 바�
 // 방해꾼·조력자의 말도 스트리머 대기열에 들어간다. 후원은 곧바로 반응, 채팅은 다음 턴에 함께 읽는다
 // 다른 시청자의 후원은 4초 뒤에 반응한다: 플레이어가 후원으로 맞받아칠 틈(가장 나중 후원을 따르므로 같은 턴에 들어오면 플레이어 후원이 이긴다).
 // 1.5초면 방해꾼 후원이 뜨자마자 한별이 움직여 막을 수 없었다(스테이지 3 Gemini 플레이테스트: 바위 길 한가운데 금화로 꾀어 쓰러짐)
-viewers.connect(m => { pending.push(m); scheduleBy(m.kind === 'dona' ? 4000 : AUTO_DELAY); });
+viewers.connect(m => { m.seq ??= chatCount(); pending.push(m);   // 자기 줄은 이미 올라간 뒤라 그 뒤 줄부터 센다
+  scheduleBy(m.kind === 'dona' ? 4000 : AUTO_DELAY); });
 $('resetBtn').onclick = () => { pending = []; restartStage(); schedule(2000); };
 $('guideBtn').onclick = e => { document.body.classList.toggle('guide'); e.target.classList.toggle('on'); drawBubble(); };
 

@@ -68,7 +68,7 @@ export const ART = {
   dona: chatArt([
     [chat('눈팅러', '#9bd0ff', 'ㅋㅋㅋㅋ')],
     [chat('감자튀김', '#ff9e6b', '귀엽다')],
-    [`<p class="me missed"><span class="nick">나</span>왼쪽 문으로 가!<span class="readtag missed">💨 놓침</span></p>`, note('채팅은 붐비면<br>놓칠 수 있다', C.dim)],
+    [`<p class="me missed"><span class="nick">나</span>왼쪽 문으로 가!<span class="readtag missed">💨 놓침</span></p>`, note('채팅이 밀려 올라가면<br>놓칠 수 있다', C.dim)],
     [chat('치킨먹고싶다', '#7be08a', '오늘 안에 깨긴 하냐')],
     [donaLine('나', '100', '왼쪽 문으로 가!', true), note('후원은 반드시 읽는다<br><small>대신 ⚡를 쓴다</small>', C.ok)],
     [streamerLine('오케이, 왼쪽 문이지? 바로 간다!')],

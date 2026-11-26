@@ -158,17 +158,18 @@ export function donate(nick, amount, msg, mine) {
 /* ── 채팅 ── */
 const log = $('log');
 export const esc = s => s.replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
-const chatTimes = [];
+let chatSeq = 0;
 export function addLine(html, cls = '') {
   const stick = log.scrollHeight - log.scrollTop - log.clientHeight < 40;
   const p = document.createElement('p'); p.className = cls; p.innerHTML = html; log.appendChild(p);
   while (log.children.length > 120) log.firstChild.remove();
   if (stick) log.scrollTop = log.scrollHeight;
-  if (cls === '' || cls === 'dona-line') { chatTimes.push(Date.now()); if (chatTimes.length > 50) chatTimes.shift(); }
+  if (cls === '' || cls === 'dona-line') chatSeq++;
   return p;
 }
-// 최근 ms 동안 다른 시청자가 올린 줄 수: 채팅창이 붐빌수록 스트리머가 내 채팅을 놓친다
-export const chatNoise = (ms = 8000) => chatTimes.filter(t => Date.now() - t < ms).length;
+// 지금까지 다른 시청자가 올린 줄 수(채팅·후원. 내 채팅·한별 대사·시스템 줄은 세지 않는다).
+// 메시지를 받을 때 이 값을 적어 두면, 판단할 때 "그 뒤로 몇 줄이 쌓여 밀려 올라갔나"를 알 수 있다
+export const chatCount = () => chatSeq;
 // 내 채팅에 스트리머가 읽었는지 표시(판정은 한별의 다음 AI 턴이 시작될 때)
 // 읽음: 줄 끝에 한별 얼굴 아이콘이 콕 찍히고 줄이 노랗게 잠깐 반짝인다
 // 놓침: 줄 전체가 흐려지며 취소선이 그어지고, 칸 외곽선이 잠깐 빛났다 흐려진다
