@@ -516,7 +516,10 @@ function planPath(from, to, targetId) {
   const path = [to];
   // 골짜기(절벽 벽): 틈새에 들고 날 때는 길 안쪽으로 한 번 나왔다가 들어간다. 곧장 대각선으로 가면 벽의 돌 무더기를 뚫고 지나가서
   if (curArea?.env.border === 'cliff') {
-    const lim = curArea.env.w / 2 - 0.9, inLane = p => v3(THREE.MathUtils.clamp(p.x, -lim, lim), EYE, p.z);
+    // 굴러오는 위험이 있는 골짜기에서는 '길로 나온다'가 바위에 맞는 범위(|x| < lane/2) 안으로 들어오는 것이어야 한다.
+    // 벽 쪽(±3.1)까지만 나오면 바위 범위(±3) 밖이라, 같은 쪽 틈새를 건너뛰어 벽을 따라 걸어도 맞지 않았다(1→3번 틈새)
+    const H = curArea.hazard, wall = curArea.env.w / 2 - 0.9;
+    const lim = H ? Math.min(wall, (H.lane || 3) / 2 - 0.5) : wall, inLane = p => v3(THREE.MathUtils.clamp(p.x, -lim, lim), EYE, p.z);
     if (Math.abs(to.x) > lim) path.unshift(inLane(to));
     if (Math.abs(from.x) > lim) path.unshift(inLane(from));
     if (path.length > 1) return path;
