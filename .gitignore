@@ -17,3 +17,9 @@ assets/streamer/
 
 # 에셋 팩 원본 zip(합계 약 72MB). 게임은 풀어 둔 assets/models/ 만 쓴다
 assets/*.zip
+
+# 포트폴리오 관련 파일: 저장소에 올리지 않는다(로컬에서만 관리)
+portfolio.html
+portfolio/
+portfolio_final/
+assets/portfolio/
